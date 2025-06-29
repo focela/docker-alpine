@@ -1,0 +1,139 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Permissions and User Management Initialization
+#
+# Purpose: Configures user/group IDs and group memberships from environment variables
+# Context: Runs in s6-overlay environment with with-contenv wrapper
+# Note: Part of cont-init.d series (02-permissions)
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# INITIALIZATION
+#-----------------------------------------------------------------------------
+# Load container functions and prepare for permissions management
+source /assets/functions/00-container
+output_off
+# shellcheck disable=SC2034
+PROCESS_NAME="permissions"
+
+#-----------------------------------------------------------------------------
+# PERMISSIONS FEATURE CONFIGURATION
+#-----------------------------------------------------------------------------
+# Handle legacy ENABLE_PERMISSIONS variable for backward compatibility
+if var_true "${ENABLE_PERMISSIONS}" ; then
+  CONTAINER_ENABLE_PERMISSIONS=TRUE
+  elif var_false "${ENABLE_PERMISSIONS}" ; then
+  CONTAINER_ENABLE_PERMISSIONS=FALSE
+fi
+
+# Enable debug logging if DEBUG_PERMISSIONS is set
+if var_true "${DEBUG_PERMISSIONS}" ; then
+  CONTAINER_LOG_LEVEL="DEBUG"
+fi
+
+#-----------------------------------------------------------------------------
+# USER ID MODIFICATION
+#-----------------------------------------------------------------------------
+if var_true "${CONTAINER_ENABLE_PERMISSIONS}" ; then
+  print_debug "Enabling permissions features"
+
+  # Collect USER_* and CONTAINER_USER_* environment variables
+  unames="$(set -o posix ; set | sort | grep -e '^USER_' | sed "s|^USER_||g" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n') "
+  unames+="$(set -o posix ; set | sort | grep -e '^CONTAINER_USER_' | sed "s|^CONTAINER_USER_||g" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n')"
+
+  # Process each user ID modification
+  for upair in $unames; do
+    uname=$(echo "${upair}" | cut -d = -f 1)
+    uid=$(echo "${upair}" | cut -d = -f 2)
+    # Check if user exists (with underscore or dash variants)
+    if grep -e "^${uname}" /etc/passwd > /dev/null; then
+       _userexists=true
+    elif grep -e "^${uname/_/-}" /etc/passwd > /dev/null; then
+       _userexists=true
+       uname=${uname/_/-}
+    fi
+    # Modify UID in /etc/passwd if user exists
+    if [ "${_userexists}" = true ] ; then
+      ouid=$(grep -e "^${uname}" /etc/passwd | awk -F: '{print $3}')
+
+      print_debug "Changing user '${uname}' to uid '${uid}' from '${ouid}'"
+      sed -i "s|${uname}:x:${ouid}:|${uname}:x:${uid}:|g" /etc/passwd
+    fi
+  done
+
+#-----------------------------------------------------------------------------
+# GROUP ID MODIFICATION
+#-----------------------------------------------------------------------------
+  # Collect GROUP_* and CONTAINER_GROUP_* environment variables (excluding ADD variants)
+  groups="$(set -o posix ; set | sort | grep -e '^GROUP_' | sed "s|^GROUP_||g" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n' | sed '/add_.*/d' ) "
+  groups+="$(set -o posix ; set | sort | grep -e '^CONTAINER_GROUP_' | sed "s|^CONTAINER_GROUP_||g" | tr '[:upper:]' '[:lower:]' | tr ' ' '\n' | sed '/add_.*/d' ) "
+
+  # Process each group ID modification
+  for gpair in $groups; do
+    gname=$(echo "${gpair}" | cut -d = -f 1)
+    gid=$(echo "${gpair}" | cut -d = -f 2)
+    # Check if group exists (with underscore or dash variants)
+    if grep -e "^${gname}" /etc/group > /dev/null; then
+       _groupexists=true
+    elif grep -e "^${gname/_/-}" /etc/group > /dev/null; then
+       _groupexists=true
+       gname=${gname/_/-}
+    fi
+
+    # Modify GID in both /etc/passwd and /etc/group if group exists
+    if [ "${_groupexists}" = true ] ; then
+      opgid=$(grep -e "^${gname}" /etc/passwd | awk -F: '{print $4}')
+      og=$(grep -e "^${gname}" /etc/group | awk -F: '{print $1}')
+      oggid=$(grep -e "^${gname}" /etc/group | awk -F: '{print $3}')
+      print_debug "Changing group '${gname}' to gid '${gid}' from '${oggid}'"
+      sed -i "s|\(.*\):\(.*\):\(.*\):${opgid}:|\1:\2:\3:${gid}:|g" /etc/passwd
+      sed -i "s|${og}:x:${oggid}|${og}:x:${gid}|g" /etc/group
+    fi
+  done
+
+#-----------------------------------------------------------------------------
+# GROUP MEMBERSHIP MANAGEMENT
+#-----------------------------------------------------------------------------
+  # Collect GROUP_ADD_* and CONTAINER_GROUP_ADD_* environment variables
+  groupsadd="$(set -o posix ; set | sort | grep -e '^GROUP_ADD_' | sed 's|^GROUP_ADD_||g' | tr '[:upper:]' '[:lower:]' ) "
+  groupsadd+="$(set -o posix ; set | sort | grep -e '^CONTAINER_GROUP_ADD_' | sed 's|^CONTAINER_GROUP_ADD_||g' | tr '[:upper:]' '[:lower:]' )"
+
+  # Process group membership additions
+  for gapair in $groupsadd; do
+    gname=$(echo "${gapair}" | cut -d = -f1 )
+    # Check if group exists (with underscore or dash variants)
+    if grep -e "^${gname}" /etc/group > /dev/null; then
+       _groupexists=true
+    elif grep -e "^${gname/_/-}" /etc/group > /dev/null; then
+       _groupexists=true
+       gname=${gname/_/-}
+    fi
+
+    # Add users to group using OS-appropriate commands
+    if [ "${_groupexists}" = true ] ; then
+      uta=$(echo ${gapair} | cut -d = -f2 | tr ',' '\n')
+      for userstogroup in ${uta} ; do
+        print_debug "Adding user '${userstogroup}' to '${gname}'"
+        # Use OS-specific group management commands
+        os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
+        case ${os,,} in
+          "alpine" )
+            silent addgroup ${userstogroup} ${gname}
+          ;;
+          "debian" | "ubuntu" )
+            silent usermod -a -G ${gname} ${userstogroup}
+          ;;
+        esac
+      done
+    fi
+  done
+fi
+
+#-----------------------------------------------------------------------------
+# FINALIZATION
+#-----------------------------------------------------------------------------
+# Mark initialization complete and restore output
+liftoff
+output_on
