@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Permissions Configuration Defaults
+#
+# Purpose: Sets default environment variables for permissions debugging
+# Context: Runs in s6-overlay environment with with-contenv wrapper
+# Note: Configures debug settings for permission management operations
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# DEBUG CONFIGURATION
+#-----------------------------------------------------------------------------
+# Enable or disable debug output for permissions operations
+DEBUG_PERMISSIONS=${DEBUG_PERMISSIONS:-"FALSE"}
