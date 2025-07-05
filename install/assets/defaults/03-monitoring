@@ -1,0 +1,90 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Monitoring Configuration Defaults
+#
+# Purpose: Sets default environment variables for Zabbix monitoring agent
+# Context: Runs in s6-overlay environment with with-contenv wrapper
+# Note: Configures agent settings and determines agent type based on OS
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# BASIC ZABBIX CONFIGURATION
+#-----------------------------------------------------------------------------
+# File and directory paths
+ZABBIX_CONFIG_FILE=${ZABBIX_CONFIG_FILE:-"zabbix_agentd.conf"}
+ZABBIX_CONFIG_PATH=${ZABBIX_CONFIG_PATH:-"/etc/zabbix/"}
+ZABBIX_CERT_PATH=${ZABBIX_CERT_PATH:-"/etc/zabbix/certs/"}
+ZABBIX_PID=${ZABBIX_PID:-"/var/lib/zabbix/run/zabbix-agent.pid"}
+ZABBIX_SOCKET=${ZABBIX_SOCKET:-"/var/lib/zabbix/run/zabbix-agent.sock"}
+
+# User and permission settings
+ZABBIX_USER=${ZABBIX_USER:-"zabbix"}
+ZABBIX_ALLOW_ROOT=${ZABBIX_ALLOW_ROOT:-"1"}
+ZABBIX_USER_DOAS=${ZABBIX_USER_DOAS:-"TRUE"}
+ZABBIX_USER_SUDO=${ZABBIX_USER_SUDO:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# NETWORK AND CONNECTION SETTINGS
+#-----------------------------------------------------------------------------
+# Server and network configuration
+ZABBIX_SERVER=${ZABBIX_SERVER:-"0.0.0.0/0"}
+ZABBIX_SERVER_ACTIVE=${ZABBIX_SERVER_ACTIVE:-"zabbix-proxy"}
+ZABBIX_LISTEN_IP=${ZABBIX_LISTEN_IP:-"0.0.0.0"}
+ZABBIX_LISTEN_PORT=${ZABBIX_LISTEN_PORT:-"10050"}
+ZABBIX_STATUS_PORT=${ZABBIX_STATUS_PORT:-"8050"}
+
+# Connection and timing settings
+ZABBIX_AGENT_TIMEOUT=${ZABBIX_AGENT_TIMEOUT:-"3"}
+ZABBIX_REFRESH_ACTIVE_CHECKS=${ZABBIX_REFRESH_ACTIVE_CHECKS:-"120"}
+ZABBIX_BUFFER_SEND=${ZABBIX_BUFFER_SEND:-"5"}
+ZABBIX_BUFFER_SIZE=${ZABBIX_BUFFER_SIZE:-"100"}
+
+#-----------------------------------------------------------------------------
+# LOGGING AND DEBUGGING SETTINGS
+#-----------------------------------------------------------------------------
+# Log file configuration
+ZABBIX_AGENT_LOG_FILE=${ZABBIX_AGENT_LOG_FILE:-"zabbix_agentd.log"}
+ZABBIX_AGENT_LOG_PATH=${ZABBIX_AGENT_LOG_PATH:-"/var/log/zabbix/agent/"}
+ZABBIX_LOG_FILE_SIZE=${ZABBIX_LOG_FILE_SIZE:-"0"}
+ZABBIX_DEBUGLEVEL=${ZABBIX_DEBUGLEVEL:-"1"}
+
+#-----------------------------------------------------------------------------
+# AGENT BEHAVIOR SETTINGS
+#-----------------------------------------------------------------------------
+# Agent operation parameters
+ZABBIX_HOSTNAME=${ZABBIX_HOSTNAME:-"${CONTAINER_NAME}"}
+ZABBIX_SETUP_TYPE=${ZABBIX_SETUP_TYPE:-"AUTO"}
+ZABBIX_START_AGENTS=${ZABBIX_START_AGENTS:-"1"}
+ZABBIX_MAXLINES_SECOND=${ZABBIX_MAXLINES_SECOND:-"20"}
+
+# Registration settings
+ZABBIX_ENABLE_AUTOREGISTER=${ZABBIX_ENABLE_AUTOREGISTER:-"TRUE"}
+ZABBIX_ENABLE_AUTOREGISTER_DNS=${ZABBIX_ENABLE_AUTOREGISTER_DNS:-"TRUE"}
+
+# Remote command settings
+ZABBIX_REMOTECOMMANDS_ALLOW=${ZABBIX_REMOTECOMMANDS_ALLOW:-"*"}
+ZABBIX_REMOTECOMMANDS_LOG=${ZABBIX_REMOTECOMMANDS_LOG:-"1"}
+
+#-----------------------------------------------------------------------------
+# OS DETECTION AND AGENT TYPE DETERMINATION
+#-----------------------------------------------------------------------------
+# Extract OS ID from release file
+os=$(grep ^ID= /etc/os-release | cut -d = -f2)
+
+# Determine agent type based on OS distribution and version
+case ${os} in
+  "alpine" )
+    # Extract Alpine version number for agent type decision
+    osver=$(grep VERSION_ID /etc/os-release | cut -d = -f 2 | cut -d . -f 2 | cut -d _ -f 1)
+    if [ "${osver}" -ge 15 ] || [ "$osver" = "edge" ] ; then
+      ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"modern"}
+    else
+      ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"classic"}
+    fi
+  ;;
+  "debian" | "ubuntu" )
+    ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"modern"}
+  ;;
+esac
