@@ -1,0 +1,195 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Log Shipping Service Runner
+#
+# Purpose: Manages log shipping services with auto-configuration and backend support
+# Context: s6-overlay service script for log processing and shipping
+# Note: Handles fluent-bit startup with automatic logrotate discovery and configuration
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SERVICE INITIALIZATION
+#-----------------------------------------------------------------------------
+# Load container functions and prepare service environment
+source /assets/functions/00-container
+output_off
+PROCESS_NAME="logging"
+prepare_service defaults single
+check_container_initialized
+check_service_initialized init
+
+#-----------------------------------------------------------------------------
+# SERVICE DEPENDENCY WAITING
+#-----------------------------------------------------------------------------
+# Wait for cron service if scheduling is enabled
+if var_true "${CONTAINER_ENABLE_SCHEDULING}" ; then
+  print_debug "[logship] Waiting for Cron to start"
+  counter=0
+  while ! pgrep crond > /dev/null ; do
+    sleep 1
+  done
+fi
+liftoff
+
+#-----------------------------------------------------------------------------
+# LOG SHIPPING BACKEND CONFIGURATION
+#-----------------------------------------------------------------------------
+# Configure and start log shipping service based on backend type
+case "${CONTAINER_LOGSHIPPING_BACKEND,,}" in
+  "fluent-bit" | "fluentbit" )
+    #-----------------------------------------------------------------------------
+    # FLUENT-BIT TAIL CONFIGURATION SETUP
+    #-----------------------------------------------------------------------------
+    # Configure optional tail input parameters based on feature flags
+    if var_true "${FLUENTBIT_TAIL_KEY_PATH_ENABLE}" ; then
+      tail_key_path="    Path_Key          ${FLUENTBIT_TAIL_KEY_PATH}"
+    fi
+
+    if var_true "${FLUENTBIT_TAIL_KEY_OFFSET_ENABLE}" ; then
+      tail_key_offset="    Offset_Key        ${FLUENTBIT_TAIL_KEY_OFFSET}"
+    fi
+
+    if [ -n "${FLUENTBIT_TAIL_IGNORE_OLDER}" ] ; then
+      tail_ignore_older="    Ignore_Older      ${FLUENTBIT_TAIL_IGNORE_OLDER}"
+    fi
+
+    # Convert boolean values to ON/OFF format for fluent-bit configuration
+    truefalse_onoff FLUENTBIT_TAIL_SKIP_EMPTY_LINES
+    truefalse_onoff FLUENTBIT_TAIL_SKIP_LONG_LINES
+
+    #-----------------------------------------------------------------------------
+    # AUTOMATIC LOGROTATE CONFIGURATION DISCOVERY
+    #-----------------------------------------------------------------------------
+    # Parse logrotate files and create fluent-bit input configurations
+    if var_true "${LOGSHIPPING_AUTO_CONFIG_LOGROTATE}" ; then
+      print_debug "[logship] Starting to parse logrotate files for log shipping"
+      mkdir -p /tmp/.container/logship/
+      if [ ! -f "/tmp/.container/logship/logrotate" ]; then
+        for logrotate_file in /etc/logrotate.d/* ; do
+          set -f
+          # Extract log file paths from logrotate configuration
+          logrotate_paths=$(grep '{' "${logrotate_file}" | cut -d { -f 1 | xargs | tr " " "\n" ; )
+          for logrotate_path in $logrotate_paths ; do
+            if ! grep -Fq "$logrotate_path" /etc/fluent-bit/conf.d/in_tail_*.conf >/dev/null 2>&1 ; then
+              # Check for logship parser directives in logrotate comments
+              if grep -Fq "# logship:" "${logrotate_file}" >/dev/null 2>&1 ; then
+                logrotate_parser=$(grep "# logship:" "${logrotate_file}" | cut -d : -f 2 | tr "," "\n" | xargs)
+                if [ "$(echo "${logrotate_parser}" | wc -w)" -gt 1 ] ; then
+                  print_debug "[logship] Found Multiple parsers in logrotate configuration"
+                  multiple_parsers=TRUE
+                  logrotate_parsers_full=${logrotate_parser}
+                    for multi_parser in $logrotate_parsers_full; do
+                      multi_parsers=$(echo "${multi_parsers}" ; cat<<EOF
+    Parser            ${multi_parser}
+EOF
+                              )
+                    done
+                fi
+                # Handle skip/ignore directives and parser configuration
+                case "$(echo "${logrotate_parser,,}" | awk '{print $1}')" in
+                  "skip" | "ignore" )
+                    print_debug "[logship] Logrotate configuration is telling us to skip shipping logs for '$(basename "${logrotate_file}")'"
+                    skip_processing=TRUE
+                  ;;
+                  * )
+                    print_debug "[logship] Logrotate directed us to use the '${logrotate_parser}' parser for '$(basename "${logrotate_file}")'"
+                    logrotate_parser="    Parser            $(echo "${logrotate_parser}" | awk '{print $1}')"
+                  ;;
+                esac
+              fi
+
+              #-----------------------------------------------------------------------------
+              # FLUENT-BIT INPUT CONFIGURATION GENERATION
+              #-----------------------------------------------------------------------------
+              # Generate fluent-bit tail input configuration for discovered log files
+              if [ "${skip_processing}" != "TRUE" ]; then
+                print_debug "[logship] Creating Log ship entry for '${logrotate_path}' to be parsed by '${CONTAINER_LOGSHIPPING_BACKEND}'"
+
+                # Configure database tracking if enabled
+                if var_true "${FLUENTBIT_TAIL_DB_ENABLE}" ; then
+                  tail_db=$(cat<<EOF
+    DB                $(dirname ${logrotate_path})/.$(basename ${logrotate_path}).db
+    DB.sync           ${FLUENTBIT_TAIL_DB_SYNC}
+    DB.locking        ${FLUENTBIT_TAIL_DB_LOCK}
+    DB.journal_mode   ${FLUENTBIT_TAIL_DB_JOURNAL_MODE}
+EOF
+                  )
+                fi
+
+                # Generate complete INPUT section for fluent-bit configuration
+                cat <<EOF >> "/etc/fluent-bit/conf.d/in_tail_$(basename "${logrotate_file,,}").conf"
+# Log File Shipping created automatically generated by reading ${logrotate_file}
+# Generated on $(TZ=${TIMEZONE} date +'%Y-%m-%d %H:%M:%S %Z')
+
+[INPUT]
+    Name              tail
+    Path              ${logrotate_path}
+    Tag               $(basename "${logrotate_file,,}")
+    Buffer_Chunk_Size ${FLUENTBIT_TAIL_BUFFER_CHUNK_SIZE}
+    Buffer_Max_Size   ${FLUENTBIT_TAIL_BUFFER_MAX_SIZE}
+    Read_from_Head    ${FLUENTBIT_TAIL_READ_FROM_HEAD}
+    Skip_Empty_Lines  ${FLUENTBIT_TAIL_SKIP_EMPTY_LINES}
+    Skip_Long_Lines   ${FLUENTBIT_TAIL_SKIP_LONG_LINES}
+${tail_key_path}
+${logrotate_parser}
+${tail_db}
+${tail_ignore_older}
+${tail_key_offset}
+EOF
+              fi
+            fi
+            set +f
+          done
+
+          #-----------------------------------------------------------------------------
+          # FLUENT-BIT FILTER CONFIGURATION GENERATION
+          #-----------------------------------------------------------------------------
+          # Add record modifier filter if not already present
+          if ! grep -q 'record_modifier' "/etc/fluent-bit/conf.d/in_tail_$(basename "${logrotate_file,,}").conf" ; then
+            cat <<EOF >> "/etc/fluent-bit/conf.d/in_tail_$(basename "${logrotate_file,,}").conf"
+
+[FILTER]
+    Name record_modifier
+    Match $(basename "${logrotate_file,,}")
+    Record container_name ${CONTAINER_NAME}
+    Record product $(basename "${logrotate_file,,}")
+    Record hostname $(hostname)
+EOF
+          fi
+
+          # Add multiple parser filter if multiple parsers were configured
+          if var_true "${multiple_parsers}" ; then
+            if ! grep -q 'Reserve_Data' "/etc/fluent-bit/conf.d/in_tail_$(basename "${logrotate_file,,}").conf" ; then
+              cat <<EOF >> "/etc/fluent-bit/conf.d/in_tail_$(basename "${logrotate_file,,}").conf"
+
+[FILTER]
+    Name            parser
+    Match           $(basename "${logrotate_file,,}")
+    Preserve_Key    Off
+    Reserve_Data    On
+    Key_Name        multilog
+${multi_parsers}
+EOF
+            fi
+          fi
+          unset logrotate_parsers_full
+          unset multiple_parsers
+          unset multi_parsers
+        done
+        # Clean up double slashes in configuration files
+        sed -i "s|//|/|g" /etc/fluent-bit/conf.d/*.conf
+        touch /tmp/.container/logship/logrotate
+      fi
+    fi
+
+    #-----------------------------------------------------------------------------
+    # FLUENT-BIT SERVICE STARTUP
+    #-----------------------------------------------------------------------------
+    # Start fluent-bit service with main configuration
+    print_start "[logship] Starting fluent-bit ${FLUENTBIT_VERSION}"
+    output_on
+    silent exec fluent-bit -c /etc/fluent-bit/fluent-bit.conf
+  ;;
+esac
