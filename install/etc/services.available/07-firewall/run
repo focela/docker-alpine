@@ -1,0 +1,44 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Firewall Service Runner
+#
+# Purpose: Manages firewall services including fail2ban intrusion prevention
+# Context: s6-overlay service script for firewall and security management
+# Note: Handles fail2ban startup with configurable startup delay and logging
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SERVICE INITIALIZATION
+#-----------------------------------------------------------------------------
+# Load container functions and prepare service environment
+source /assets/functions/00-container
+output_off
+PROCESS_NAME="firewall"
+prepare_service defaults single
+check_container_initialized
+check_service_initialized init
+
+liftoff
+
+#-----------------------------------------------------------------------------
+# STARTUP DELAY CONFIGURATION
+#-----------------------------------------------------------------------------
+# Wait for log files to be populated before starting fail2ban
+print_debug "Sleeping for '${FAIL2BAN_STARTUP_DELAY}' seconds before starting Fail2ban to make sure logs are popualated"
+sleep ${FAIL2BAN_STARTUP_DELAY}
+
+#-----------------------------------------------------------------------------
+# FAIL2BAN SERVICE STARTUP
+#-----------------------------------------------------------------------------
+# Start fail2ban with appropriate output handling based on log configuration
+print_start "Starting Fail2ban"
+
+if [ "${FAIL2BAN_LOG_TYPE,,}" = "file" ] ; then
+  output_on
+  silent exec fail2ban-server -f
+else
+  output_on
+  exec fail2ban-server -f
+fi
