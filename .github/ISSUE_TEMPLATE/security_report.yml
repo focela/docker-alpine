@@ -1,0 +1,373 @@
+name: Security Vulnerability Report
+description: Report a security vulnerability in the Docker Alpine container (Private - will be converted to security advisory)
+title: "[Security]: "
+labels: ["security", "vulnerability", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🔒 Security Vulnerability Report
+        
+        **⚠️ IMPORTANT SECURITY NOTICE ⚠️**
+        
+        This template is for reporting security vulnerabilities in the Docker Alpine container. Please follow responsible disclosure practices:
+        
+        - **For critical security issues**: Email us directly at [security@focela.com](mailto:security@focela.com) instead of using this public form
+        - **This issue will be converted** to a private security advisory for proper handling
+        - **Do not include** sensitive information, exploits, or proof-of-concept code in this public form
+        - **Read our [Security Policy](SECURITY.md)** for complete guidelines and response timelines
+        
+        Thank you for helping keep Docker Alpine secure! 🛡️
+
+  - type: checkboxes
+    id: security-prerequisites
+    attributes:
+      label: Security Prerequisites
+      description: Please confirm the following before submitting this security report
+      options:
+        - label: I have read and understand the [Security Policy](SECURITY.md)
+          required: true
+        - label: This is a legitimate security vulnerability, not a feature request or bug
+          required: true
+        - label: I have not publicly disclosed this vulnerability elsewhere
+          required: true
+        - label: I understand this issue will be handled as a private security advisory
+          required: true
+        - label: I am not including sensitive exploits or proof-of-concept code in this public form
+          required: true
+
+  - type: dropdown
+    id: vulnerability-type
+    attributes:
+      label: Vulnerability Type
+      description: What type of security vulnerability are you reporting?
+      options:
+        - Code Injection (Command/SQL/Script injection)
+        - Authentication Bypass
+        - Authorization/Access Control Issue
+        - Privilege Escalation
+        - Information Disclosure/Data Leak
+        - Cross-Site Scripting (XSS)
+        - Cross-Site Request Forgery (CSRF)
+        - Path Traversal/Directory Traversal
+        - File Upload Vulnerability
+        - Cryptographic Issue
+        - Configuration Security Issue
+        - Container Escape/Sandbox Bypass
+        - Network Security Issue
+        - Dependency/Supply Chain Vulnerability
+        - Memory Corruption (Buffer Overflow, etc.)
+        - Race Condition
+        - Denial of Service (DoS)
+        - Resource Exhaustion Attack
+        - Volume Mount Vulnerability
+        - Namespace Isolation Bypass
+        - Other (specify in description)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity-assessment
+    attributes:
+      label: Preliminary Severity Assessment
+      description: How would you rate the severity of this vulnerability?
+      options:
+        - "Critical - Remote code execution, system compromise, container escape"
+        - "High - Significant data access, privilege escalation, host access"
+        - "Medium - Limited data access, local privilege escalation"
+        - "Low - Information disclosure, minor security impact"
+        - "Informational - Security best practice improvement"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected-components
+    attributes:
+      label: Affected Components
+      description: Which components are affected by this vulnerability?
+      options:
+        - label: S6 Overlay (process supervision)
+        - label: Zabbix Agent (monitoring system)
+        - label: Fluent Bit (log processing)
+        - label: MSMTP (email delivery)
+        - label: Fail2ban (intrusion prevention)
+        - label: OpenDoas (privilege escalation)
+        - label: Cron scheduling system
+        - label: GoLang runtime
+        - label: YQ (YAML processor)
+        - label: Container initialization scripts
+        - label: Environment variable handling
+        - label: File permission system
+        - label: Network configuration
+        - label: Alpine Linux base system
+        - label: Docker container runtime
+        - label: Multi-architecture builds
+        - label: Health check system
+        - label: Custom scripts/hooks
+        - label: Configuration management
+        - label: Volume/mount handling
+        - label: Container isolation mechanisms
+        - label: Resource limits enforcement
+
+  - type: dropdown
+    id: affected-architectures
+    attributes:
+      label: Affected Architectures
+      description: Which architectures are impacted by this vulnerability?
+      multiple: true
+      options:
+        - "All architectures (amd64, arm64, arm/v7)"
+        - "amd64 only"
+        - "arm64 only"
+        - "arm/v7 only"
+        - "Unknown/Not tested"
+    validations:
+      required: true
+
+  - type: input
+    id: affected-versions
+    attributes:
+      label: Affected Versions
+      description: "Which versions of Docker Alpine are affected? (Include specific Alpine versions: 3.5-3.21, edge)"
+      placeholder: "e.g., 7.10.31 (Alpine 3.21), 7.10.30 (Alpine 3.20), all versions since 7.10.x"
+    validations:
+      required: true
+
+  - type: textarea
+    id: vulnerability-summary
+    attributes:
+      label: Vulnerability Summary
+      description: Brief, high-level description of the security issue (avoid sensitive details)
+      placeholder: |
+        Provide a concise summary of the vulnerability:
+        - What is the security issue?
+        - What component or functionality is affected?
+        - What is the potential impact?
+        - Is this a container-specific issue (escape, isolation bypass, etc.)?
+        
+        ⚠️ Do not include exploit details or proof-of-concept code
+    validations:
+      required: true
+
+  - type: textarea
+    id: attack-vector
+    attributes:
+      label: Attack Vector
+      description: How can this vulnerability be triggered? (general description only)
+      placeholder: |
+        Describe the attack vector in general terms:
+        - Is authentication required?
+        - Is network access needed?
+        - What user privileges are required?
+        - What conditions must be met?
+        - Does it require specific container configuration?
+        - Is it exploitable from within or outside the container?
+        
+        ⚠️ Avoid specific exploitation steps
+    validations:
+      required: true
+
+  - type: textarea
+    id: potential-impact
+    attributes:
+      label: Potential Impact
+      description: What could an attacker achieve by exploiting this vulnerability?
+      placeholder: |
+        Describe the potential impact:
+        - Data that could be accessed or modified
+        - System privileges that could be gained
+        - Services that could be disrupted
+        - Confidentiality, Integrity, or Availability impacts
+        - Scope of potential damage
+        - Could this lead to host system compromise?
+        - Impact on other containers in the same environment?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: security-context
+    attributes:
+      label: Security Context
+      description: In what deployment contexts is this vulnerability exploitable?
+      options:
+        - label: Default container configuration
+        - label: Containers with elevated privileges (--privileged)
+        - label: Containers with specific volume mounts
+        - label: Containers with network access
+        - label: Multi-container deployments
+        - label: Kubernetes/orchestrated environments
+        - label: Containers with custom configurations
+        - label: Development environments only
+        - label: Production environments
+        - label: Requires specific environment variables
+        - label: Containers with host network access (--network=host)
+        - label: Containers with host PID namespace (--pid=host)
+        - label: Containers with read-only root filesystem
+        - label: Containers with resource limits
+        - label: Isolated container deployments
+
+  - type: textarea
+    id: reproduction-overview
+    attributes:
+      label: Reproduction Overview
+      description: High-level steps to reproduce (without sensitive exploitation details)
+      placeholder: |
+        General reproduction steps:
+        1. Deploy container with [general configuration]
+        2. Access [component/service] via [method]
+        3. Perform [general action type]
+        4. Observe [security impact]
+        
+        Container-specific considerations:
+        - What container runtime is required?
+        - Any specific mount points or volumes needed?
+        - Network configuration requirements?
+        - Privilege level requirements?
+        
+        ⚠️ Do not include actual exploit commands or payloads
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment-context
+    attributes:
+      label: Environment Context
+      description: Deployment environment where this vulnerability was discovered
+      placeholder: |
+        - Container platform: (Docker, Kubernetes, etc.)
+        - Host OS: (Ubuntu, RHEL, etc.)
+        - Network configuration: (isolated, public, etc.)
+        - Security controls: (SELinux, AppArmor, etc.)
+        - Deployment method: (docker-compose, helm, etc.)
+        - Container runtime version: (Docker, containerd, etc.)
+        - Orchestration platform: (Kubernetes, Docker Swarm, etc.)
+        - Security scanning tools used: (if any)
+
+  - type: textarea
+    id: mitigation-suggestions
+    attributes:
+      label: Suggested Mitigations
+      description: Any temporary mitigations or workarounds you've identified
+      placeholder: |
+        Suggest any immediate mitigations:
+        - Configuration changes that reduce risk
+        - Environment variable modifications
+        - Network restrictions that help
+        - Alternative approaches users could take
+        - Deployment best practices that prevent exploitation
+        - Container security configurations
+        - Runtime security options
+        - Alternative base images or configurations
+
+  - type: checkboxes
+    id: compliance-implications
+    attributes:
+      label: Compliance Implications (Optional)
+      description: Does this vulnerability have compliance or regulatory implications?
+      options:
+        - label: GDPR compliance impact
+        - label: HIPAA compliance impact
+        - label: PCI DSS compliance impact
+        - label: SOX compliance impact
+        - label: Industry-specific security standards
+        - label: Audit trail requirements
+        - label: Data protection regulations
+        - label: No specific compliance implications
+
+  - type: checkboxes
+    id: disclosure-timeline
+    attributes:
+      label: Disclosure Preferences
+      description: Your preferences for handling this vulnerability disclosure
+      options:
+        - label: I prefer coordinated disclosure with a reasonable timeline
+        - label: I am willing to work with maintainers on developing a fix
+        - label: I would like to be credited in the security advisory (if appropriate)
+        - label: I can provide additional technical details privately if needed
+        - label: I am available for follow-up questions during the resolution process
+
+  - type: textarea
+    id: researcher-info
+    attributes:
+      label: Researcher Information (Optional)
+      description: Information about yourself for coordination and potential credit
+      placeholder: |
+        If you'd like to be contacted or credited:
+        - Name/Handle: [How you'd like to be credited]
+        - Organization: [If applicable]
+        - Contact method: [Preferred way to reach you privately]
+        - Public profile: [GitHub, LinkedIn, security research profile]
+        
+        ⚠️ This information may be included in public security advisories
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Security Context
+      description: Any other relevant security information
+      placeholder: |
+        Additional considerations:
+        - Related vulnerabilities or security issues
+        - Similar issues in other projects
+        - Relevant security research or CVEs
+        - Compliance implications (GDPR, HIPAA, etc.)
+        - Any other security-relevant context
+        - Container security best practices that could prevent this
+        - Industry-specific security considerations
+
+  - type: checkboxes
+    id: responsible-disclosure
+    attributes:
+      label: Responsible Disclosure Agreement
+      description: Please confirm your commitment to responsible disclosure
+      options:
+        - label: I agree to follow responsible disclosure practices
+          required: true
+        - label: I will not publicly disclose this vulnerability until a fix is available
+          required: true
+        - label: I will not share exploitation details publicly without permission
+          required: true
+        - label: I understand that security vulnerabilities require time to fix properly
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## 🔒 Security Process Next Steps
+        
+        After submitting this security report:
+        
+        ### Immediate Actions (24-48 hours)
+        1. **This issue will be converted** to a private security advisory
+        2. **Security team will be notified** automatically
+        3. **Initial assessment** will be performed
+        4. **You'll receive acknowledgment** of the report
+        
+        ### Investigation Process (1-2 weeks)
+        1. **Technical validation** of the vulnerability
+        2. **Impact assessment** and severity scoring
+        3. **Fix development** and testing
+        4. **Private coordination** with you on details
+        
+        ### Resolution & Disclosure (2-4 weeks)
+        1. **Security patch** release
+        2. **Public security advisory** publication
+        3. **Community notification** and upgrade guidance
+        4. **CVE assignment** if applicable
+        
+        ### Emergency Contact
+        **For critical vulnerabilities requiring immediate attention:**
+        📧 [security@focela.com](mailto:security@focela.com)
+        
+        ### Additional Resources
+        - 📋 [Security Policy](SECURITY.md) - Complete security guidelines
+        - 🛡️ [Security Best Practices](README.md#security) - Deployment security
+        - 📢 [Security Advisories](https://github.com/focela/docker-alpine/security/advisories) - Past advisories
+        
+        **Thank you for responsibly reporting security vulnerabilities! 🙏**
+        
+        *Your efforts help keep the Docker Alpine community secure.*
