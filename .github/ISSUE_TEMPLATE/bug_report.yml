@@ -1,0 +1,345 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug or issue with the Docker Alpine container
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## 🐛 Bug Report
+        
+        Thank you for taking the time to report a bug! Please provide as much detail as possible to help us reproduce and fix the issue.
+        
+        **Before submitting:** Please check if a similar issue already exists and ensure you're using the latest version.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting this bug report
+      options:
+        - label: I have searched for existing issues and this is not a duplicate
+          required: true
+        - label: I am using the latest version of the Docker Alpine image
+          required: true
+        - label: I have read the documentation and troubleshooting guides
+          required: true
+
+  - type: dropdown
+    id: bug-category
+    attributes:
+      label: Bug Category
+      description: What type of issue are you experiencing?
+      options:
+        - Container Startup/Initialization
+        - Service Management (S6 Overlay)
+        - Monitoring (Zabbix Agent)
+        - Logging (Fluent Bit)
+        - Email/SMTP (MSMTP)
+        - Security (Fail2ban/OpenDoas)
+        - Cron/Scheduling
+        - Networking/Connectivity
+        - File Permissions/UID/GID
+        - Performance Issues
+        - Documentation Error
+        - Multi-architecture Issue
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity / Priority
+      description: How severe is this issue?
+      options:
+        - Critical (blocks usage or data loss)
+        - Major (significant impact, workaround available)
+        - Minor (minor inconvenience, does not affect core functionality)
+        - Trivial (cosmetic or very low impact)
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Bug Description
+      description: A clear and concise description of what the bug is
+      placeholder: Describe the issue you're experiencing...
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: Detailed steps to reproduce the behavior
+      placeholder: |
+        1. Pull image with `docker pull focela/alpine:3.21`
+        2. Run container with specific configuration...
+        3. Execute command...
+        4. Observe error...
+      value: |
+        1. Pull image: `docker pull focela/alpine:<tag>`
+        2. Run container: `docker run [options] focela/alpine:<tag>`
+        3. 
+        4. 
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+      placeholder: Describe what you expected to happen...
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual-behavior
+    attributes:
+      label: Actual Behavior
+      description: What actually happened? Include error messages and logs
+      placeholder: |
+        Describe what actually happened instead...
+        
+        Include relevant logs, error messages, or screenshots if applicable.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: image-version
+    attributes:
+      label: Alpine Version
+      description: Which Alpine Linux version are you using?
+      options:
+        - "3.21 (latest)"
+        - "3.20"
+        - "3.19"
+        - "3.18"
+        - "3.17"
+        - "3.16"
+        - "3.15"
+        - "3.14"
+        - "3.13"
+        - "3.12"
+        - "3.11"
+        - "3.10"
+        - "3.9"
+        - "3.8"
+        - "3.7"
+        - "3.6"
+        - "3.5"
+        - "edge"
+        - "Other (specify in Additional Context)"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: architecture
+    attributes:
+      label: Architecture
+      description: Which architecture are you running on?
+      options:
+        - amd64 (x86_64)
+        - arm64 (aarch64)
+        - arm/v7 (armhf)
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: regression
+    attributes:
+      label: Regression
+      description: Did this issue work in a previous version?
+      options:
+        - label: This issue did not occur in a previous version
+        - label: I am not sure if this is a regression
+    validations:
+      required: false
+  - type: input
+    id: last-working-version
+    attributes:
+      label: Last Known Working Version (if applicable)
+      description: If this is a regression, specify the last version where it worked
+      placeholder: "e.g., focela/alpine:3.20, Alpine 3.20, etc."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: container-platform
+    attributes:
+      label: Container Platform
+      description: Which container runtime are you using?
+      options:
+        - Docker Desktop
+        - Docker Engine (Linux)
+        - Podman
+        - Kubernetes
+        - Docker Swarm
+        - Other (specify below)
+    validations:
+      required: true
+
+  - type: input
+    id: host-os
+    attributes:
+      label: Host Operating System
+      description: What OS is running your container platform?
+      placeholder: "e.g., Ubuntu 22.04, macOS 13.6, Windows 11, RHEL 9"
+    validations:
+      required: true
+
+  - type: input
+    id: docker-version
+    attributes:
+      label: Container Runtime Version
+      description: Version of Docker, Podman, or other container runtime
+      placeholder: "e.g., Docker 24.0.7, Podman 4.7.2"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: affected-components
+    attributes:
+      label: Affected Components
+      description: Which components seem to be affected by this issue?
+      options:
+        - label: S6 Overlay (process supervision)
+        - label: Zabbix Agent (monitoring)
+        - label: Fluent Bit (logging)
+        - label: MSMTP (email delivery)
+        - label: Fail2ban (security)
+        - label: OpenDoas (privilege escalation)
+        - label: Cron scheduling
+        - label: GoLang runtime
+        - label: YQ (YAML processor)
+        - label: Container initialization
+        - label: File permissions/UID mapping
+        - label: Network configuration
+        - label: Environment variables
+        - label: Volume mounts
+        - label: Health checks
+
+  - type: textarea
+    id: configuration
+    attributes:
+      label: Container Configuration
+      description: Provide your docker-compose.yml, docker run command, or Kubernetes manifest
+      render: yaml
+      placeholder: |
+        # docker-compose.yml
+        version: '3.8'
+        services:
+          alpine:
+            image: focela/alpine:3.21
+            environment:
+              - CONTAINER_ENABLE_CRON=TRUE
+              - CONTAINER_ENABLE_MONITORING=TRUE
+            ports:
+              - "10050:10050"
+        
+        # OR docker run command:
+        # docker run -d \
+        #   -e CONTAINER_ENABLE_CRON=TRUE \
+        #   -e CONTAINER_ENABLE_MONITORING=TRUE \
+        #   -p 10050:10050 \
+        #   focela/alpine:3.21
+
+  - type: textarea
+    id: environment-variables
+    attributes:
+      label: Environment Variables
+      description: List relevant environment variables you're using
+      render: bash
+      placeholder: |
+        CONTAINER_ENABLE_CRON=TRUE
+        CONTAINER_ENABLE_MONITORING=TRUE
+        CONTAINER_ENABLE_MESSAGING=FALSE
+        DEBUG_MODE=FALSE
+        TIMEZONE=UTC
+        # Add other relevant environment variables
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Container Logs
+      description: Provide relevant logs from the container
+      render: shell
+      placeholder: |
+        # Use: docker logs <container_name> or kubectl logs <pod_name>
+        
+        # Paste relevant log output here
+        # Include timestamps if possible
+        # Redact any sensitive information
+
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Information
+      description: Additional system details (optional but helpful)
+      placeholder: |
+        - Available RAM: 
+        - Available disk space: 
+        - Network configuration: 
+        - Firewall status: 
+        - SELinux/AppArmor status: 
+        - Other relevant system details:
+
+  - type: textarea
+    id: workarounds
+    attributes:
+      label: Workarounds
+      description: Have you found any temporary workarounds for this issue?
+      placeholder: Describe any workarounds you've discovered...
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Add any other context, screenshots, or information about the problem
+      placeholder: |
+        - Screenshots or error images
+        - Related issues or documentation
+        - Frequency of the issue (always, sometimes, specific conditions)
+        - Impact on your application
+        - Any other relevant details
+
+  - type: checkboxes
+    id: assistance
+    attributes:
+      label: Contribution
+      description: Are you willing to help resolve this issue?
+      options:
+        - label: I am willing to test proposed fixes
+        - label: I am willing to submit a pull request to fix this issue
+        - label: I can provide additional debugging information if needed
+
+  - type: checkboxes
+    id: terms
+    attributes:
+      label: Code of Conduct
+      description: By submitting this issue, you agree to follow our [Code of Conduct](https://github.com/focela/docker-alpine/blob/main/CODE_OF_CONDUCT.md).
+      options:
+        - label: I agree to follow this project's Code of Conduct
+          required: true
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        
+        ## 📋 Next Steps
+        
+        After submitting this issue:
+        1. **We'll triage** your report and add appropriate labels
+        2. **We may ask** for additional information or clarification
+        3. **You'll be notified** of any updates or when a fix is available
+        
+        **Need immediate help?** Check our [documentation](README.md) or [security policy](SECURITY.md) for urgent security issues.
+        
+        Thank you for helping improve the Docker Alpine project! 🙏
