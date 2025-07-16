@@ -1,0 +1,347 @@
+name: "Feature Request"
+description: "Suggest a new feature or improvement for the Docker Alpine container"
+title: "[Feature]: "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ✨ Feature Request
+
+        Thank you for suggesting a new feature! Your ideas help make Docker Alpine better for everyone.
+
+        **Before submitting:**
+        - Please check if a similar feature request already exists.
+        - Review our [roadmap](README.md) for planned features.
+
+  - type: checkboxes
+    id: prerequisites
+    attributes:
+      label: Prerequisites
+      description: Please confirm the following before submitting this feature request.
+      options:
+        - label: I have searched for existing feature requests and this is not a duplicate.
+          required: true
+        - label: I am using the latest version of the Docker Alpine image.
+          required: true
+        - label: I have reviewed the documentation for existing functionality.
+          required: true
+        - label: This feature would benefit the broader community, not just my specific use case.
+          required: true
+
+  - type: dropdown
+    id: feature-category
+    attributes:
+      label: Feature Category
+      description: What type of feature or improvement are you requesting?
+      options:
+        - New Software Package/Tool
+        - Service Management Enhancement (S6 Overlay)
+        - Monitoring Improvement (Zabbix Agent)
+        - Logging Enhancement (Fluent Bit)
+        - Email/SMTP Improvement (MSMTP)
+        - Security Feature (Fail2ban/OpenDoas)
+        - Cron/Scheduling Enhancement
+        - Development Tool Addition
+        - Configuration Management
+        - Multi-Architecture Support
+        - Performance Optimization
+        - Documentation Improvement
+        - API/Interface Enhancement
+        - Integration/Plugin
+        - Container Lifecycle Management
+        - Network/Connectivity Feature
+        - Storage/Volume Management
+        - Environment Variable Enhancement
+        - Health Check Improvement
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority-level
+    attributes:
+      label: Priority Level
+      description: How important is this feature to your workflow?
+      options:
+        - "Critical - Blocking current workflow"
+        - "High - Significantly improves productivity"
+        - "Medium - Nice to have improvement"
+        - "Low - Minor convenience enhancement"
+    validations:
+      required: true
+
+  - type: textarea
+    id: feature-description
+    attributes:
+      label: Feature Description
+      description: A clear and concise description of the feature you'd like to see added.
+      placeholder: Describe the feature you're requesting in detail...
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem-statement
+    attributes:
+      label: Problem Statement
+      description: What problem does this feature solve? What's the current limitation?
+      placeholder: |
+        Describe the problem or limitation you're experiencing:
+        - What are you trying to accomplish?
+        - What's preventing you from doing it currently?
+        - How does this impact your workflow?
+    validations:
+      required: true
+
+  - type: textarea
+    id: use-cases
+    attributes:
+      label: Use Cases
+      description: Describe specific scenarios where this feature would be beneficial.
+      placeholder: |
+        1. Use case 1: [Description]
+           - Context: [Environment/situation]
+           - Benefit: [How this feature helps]
+        2. Use case 2: [Description]
+           - Context: [Environment/situation]
+           - Benefit: [How this feature helps]
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: How would you like to see this feature implemented?
+      placeholder: |
+        Describe your preferred implementation:
+        - Configuration approach (environment variables, config files, etc.)
+        - Integration method (new service, enhancement to existing component)
+        - User interface (command-line options, web interface, API)
+        - Any specific technical requirements or constraints
+    validations:
+      required: false
+
+  - type: textarea
+    id: alternative-solutions
+    attributes:
+      label: Alternative Solutions
+      description: Have you considered any alternative approaches or workarounds?
+      placeholder: |
+        Describe any alternatives you've considered:
+        - Other implementation approaches
+        - Existing workarounds you're using
+        - Similar solutions in other projects
+        - Why the proposed solution is preferred
+
+  - type: checkboxes
+    id: affected-components
+    attributes:
+      label: Components That May Be Affected
+      description: Which existing components might be impacted by this feature?
+      options:
+        - label: S6 Overlay (process supervision)
+        - label: Zabbix Agent (monitoring)
+        - label: Fluent Bit (logging)
+        - label: MSMTP (email delivery)
+        - label: Fail2ban (security)
+        - label: OpenDoas (privilege escalation)
+        - label: Cron scheduling system
+        - label: GoLang runtime
+        - label: YQ (YAML processor)
+        - label: Container initialization scripts
+        - label: Environment variable handling
+        - label: File permission management
+        - label: Network configuration
+        - label: Volume mount handling
+        - label: Health check system
+        - label: Documentation
+        - label: Build process/Dockerfile
+        - label: Multi-architecture builds
+
+  - type: dropdown
+    id: target-architectures
+    attributes:
+      label: Target Architectures
+      description: Which architectures should this feature support?
+      multiple: true
+      options:
+        - "All architectures (amd64, arm64, arm/v7)"
+        - "amd64 only"
+        - "arm64 only"
+        - "arm/v7 only"
+        - "Architecture-independent"
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: deployment-contexts
+    attributes:
+      label: Deployment Contexts
+      description: Where would this feature be used? (Select all that apply)
+      options:
+        - label: Docker Compose deployments
+        - label: Kubernetes/OpenShift
+        - label: Docker Swarm
+        - label: Standalone containers
+        - label: CI/CD pipelines
+        - label: Edge computing/IoT devices
+        - label: Development environments
+        - label: Production systems
+        - label: Testing/staging environments
+        - label: Multi-tenant environments
+
+  - type: textarea
+    id: technical-requirements
+    attributes:
+      label: Technical Requirements
+      description: Specific technical requirements or constraints for this feature.
+      placeholder: |
+        - Performance requirements:
+        - Security considerations:
+        - Compatibility requirements:
+        - Resource usage constraints:
+        - Integration requirements:
+        - Configuration options needed:
+
+  - type: textarea
+    id: configuration-example
+    attributes:
+      label: Configuration Example
+      description: Show how you envision configuring or using this feature.
+      render: yaml
+      placeholder: |
+        # Example docker-compose.yml configuration
+        version: '3.8'
+        services:
+          alpine:
+            image: focela/alpine:7.10.31
+            environment:
+              - ENABLE_NEW_FEATURE=TRUE
+              - NEW_FEATURE_OPTION=value
+
+        # OR example environment variables:
+        # NEW_FEATURE_ENABLED=true
+        # NEW_FEATURE_CONFIG=/path/to/config
+
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: Describe exactly how this feature should work.
+      placeholder: |
+        1. When [condition/trigger], the feature should [action]
+        2. Users should be able to [interaction]
+        3. The feature should [output/result]
+        4. Error handling should [behavior]
+
+  - type: dropdown
+    id: backward-compatibility
+    attributes:
+      label: Backward Compatibility
+      description: Should this feature maintain backward compatibility?
+      options:
+        - "Yes - Must be fully backward compatible"
+        - "Mostly - Minor breaking changes acceptable with migration guide"
+        - "No - Breaking changes acceptable for major improvement"
+        - "Not applicable - This is purely additive"
+    validations:
+      required: true
+
+  - type: textarea
+    id: migration-considerations
+    attributes:
+      label: Migration Considerations
+      description: If this feature changes existing behavior, how should users migrate?
+      placeholder: |
+        If this feature affects existing functionality:
+        - What changes would existing users need to make?
+        - Should there be a deprecation period?
+        - What migration documentation would be needed?
+        - Are there any data migration requirements?
+
+  - type: input
+    id: current-image-version
+    attributes:
+      label: Current Image Version
+      description: Which version of Docker Alpine are you currently using?
+      placeholder: "e.g., 7.10.31"
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-workaround
+    attributes:
+      label: Current Workaround
+      description: How are you currently handling this need, if at all?
+      placeholder: |
+        Describe any current workarounds:
+        - Manual processes you're using
+        - External tools or scripts
+        - Configuration hacks
+        - Limitations of current approach
+
+  - type: textarea
+    id: references
+    attributes:
+      label: References and Examples
+      description: Links to similar implementations, documentation, or examples.
+      placeholder: |
+        - Similar feature in other projects: [URL]
+        - Relevant documentation: [URL]
+        - Code examples: [URL]
+        - Standards or specifications: [URL]
+        - Community discussions: [URL]
+
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional Context
+      description: Any other information that would help evaluate this feature request.
+      placeholder: |
+        - Screenshots or mockups
+        - Performance benchmarks
+        - Community feedback or discussions
+        - Timeline considerations
+        - Any other relevant details
+
+  - type: checkboxes
+    id: contribution-willingness
+    attributes:
+      label: Contribution
+      description: Are you willing to help implement this feature?
+      options:
+        - label: I am willing to work on implementing this feature
+        - label: I can help with testing and validation
+        - label: I can contribute documentation for this feature
+        - label: I can provide ongoing feedback during development
+        - label: I have expertise in the relevant technologies
+
+  - type: textarea
+    id: implementation-timeline
+    attributes:
+      label: Implementation Timeline
+      description: When would you need this feature? Any deadline considerations?
+      placeholder: |
+        - Urgency level: [Critical/High/Medium/Low]
+        - Preferred timeline: [ASAP/Next release/Within 6 months/No rush]
+        - Business deadline: [Date if applicable]
+        - Blocking factors: [What this prevents you from doing]
+
+  - type: markdown
+    attributes:
+      value: |
+        ---
+        ## 📋 Next Steps
+
+        After submitting this feature request:
+        1. **We'll evaluate** the request against our roadmap and priorities.
+        2. **Community feedback** will be gathered through comments and reactions.
+        3. **Technical feasibility** will be assessed by our maintainers.
+        4. **You'll be notified** of decisions and implementation progress.
+
+        **Want to discuss this feature?** Join our community discussions or contribute to the conversation in the comments below.
+
+        Thank you for helping improve the Docker Alpine project! 🚀
