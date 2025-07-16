@@ -1,0 +1,20 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Policy
+    url: https://github.com/focela/docker-alpine/security/policy
+    about: Please report security vulnerabilities here.
+  - name: Documentation
+    url: https://github.com/focela/docker-alpine#readme
+    about: Check the README for comprehensive documentation and usage examples.
+  - name: Docker Hub
+    url: https://hub.docker.com/r/focela/alpine
+    about: View and pull prebuilt Docker images from Docker Hub.
+  - name: GitHub Container Registry
+    url: https://github.com/focela/docker-alpine/packages
+    about: View and pull prebuilt Docker images from GitHub Container Registry.
+  - name: Discussions
+    url: https://github.com/focela/docker-alpine/discussions
+    about: Ask questions, share tips, and discuss usage with the community.
+  - name: Sponsorship
+    url: https://github.com/sponsors/focela
+    about: Support the project development and get priority support.
