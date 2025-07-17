@@ -1,0 +1,51 @@
+# Dependabot configuration for Alpine Linux base container image
+# Monitors GitHub Actions and Docker base image dependencies
+version: 2
+
+updates:
+  # GitHub Actions - Monitor CI/CD workflow dependencies
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    open-pull-requests-limit: 5
+    reviewers:
+      - "maintainers"
+    assignees:
+      - "maintainers"
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+
+  # Docker - Monitor Alpine Linux base image and system dependencies
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "04:00"
+      timezone: "UTC"
+    commit-message:
+      prefix: "build"
+      include: "scope"
+    open-pull-requests-limit: 3
+    reviewers:
+      - "maintainers"
+    assignees:
+      - "maintainers"
+    groups:
+      docker-base:
+        patterns:
+          - "alpine:*"
+      docker-components:
+        patterns:
+          - "golang:*"
+          - "fluent-bit:*"
+          - "zabbix:*"
+          - "s6-overlay:*"
+          - "yq:*"
+          - "doas:*"
