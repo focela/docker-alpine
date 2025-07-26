@@ -1,0 +1,95 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Default Configuration
+#
+# Purpose: Sets default environment variables for container features and services
+# Context: Executed during container initialization by s6-overlay to establish
+#          base configuration values that can be overridden by environment variables
+# Note: All values use Bash parameter expansion for fallback defaults
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# CORE CONTAINER SETTINGS
+#-----------------------------------------------------------------------------
+# Basic container identification and behavior
+CONTAINER_NAME=${CONTAINER_NAME:-"$(hostname)"}
+DEBUG_MODE=${DEBUG_MODE:-"FALSE"}
+PROCESS_NAME=${PROCESS_NAME:-"container"}
+CONTAINER_SKIP_SANITY_CHECK=${CONTAINER_SKIP_SANITY_CHECK:-"FALSE"}
+
+#-----------------------------------------------------------------------------
+# FEATURE TOGGLES
+#-----------------------------------------------------------------------------
+# Enable or disable container features and services
+CONTAINER_ENABLE_CUSTOM_BASH_PROMPT=${CONTAINER_ENABLE_CUSTOM_BASH_PROMPT:-"TRUE"}
+CONTAINER_ENABLE_DOCKER_SECRETS=${CONTAINER_ENABLE_DOCKER_SECRETS:-"TRUE"}
+CONTAINER_ENABLE_FAIL2BAN=${CONTAINER_ENABLE_FAIL2BAN:-"FALSE"}
+CONTAINER_ENABLE_FIREWALL=${CONTAINER_ENABLE_FIREWALL:-"FALSE"}
+CONTAINER_ENABLE_LOGROTATE=${CONTAINER_ENABLE_LOGROTATE:-"TRUE"}
+CONTAINER_ENABLE_LOGSHIPPING=${CONTAINER_ENABLE_LOGSHIPPING:-"FALSE"}
+CONTAINER_ENABLE_LOG_PREFIX=${CONTAINER_ENABLE_LOG_PREFIX:-"TRUE"}
+CONTAINER_ENABLE_MESSAGING=${CONTAINER_ENABLE_MESSAGING:-"TRUE"}
+CONTAINER_ENABLE_MONITORING=${CONTAINER_ENABLE_MONITORING:-"TRUE"}
+CONTAINER_ENABLE_PERMISSIONS=${CONTAINER_ENABLE_PERMISSIONS:-"TRUE"}
+CONTAINER_ENABLE_PROCESS_COUNTER=${CONTAINER_ENABLE_PROCESS_COUNTER:-"TRUE"}
+CONTAINER_ENABLE_PROCESS_HELPER=${CONTAINER_ENABLE_PROCESS_HELPER:-"TRUE"}
+CONTAINER_ENABLE_SCHEDULING=${CONTAINER_ENABLE_SCHEDULING:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# SERVICE BACKENDS
+#-----------------------------------------------------------------------------
+# Backend implementations for container services
+CONTAINER_FIREWALL_BACKEND=${CONTAINER_FIREWALL_BACKEND:-"iptables"}
+CONTAINER_LOGSHIPPING_BACKEND=${CONTAINER_LOGSHIPPING_BACKEND:-"fluent-bit"}
+CONTAINER_MESSAGING_BACKEND=${CONTAINER_MESSAGING_BACKEND:-"msmtp"}
+CONTAINER_MONITORING_BACKEND=${CONTAINER_MONITORING_BACKEND:-"zabbix"}
+CONTAINER_SCHEDULING_BACKEND=${CONTAINER_SCHEDULING_BACKEND:-"cron"}
+
+#-----------------------------------------------------------------------------
+# LOGGING CONFIGURATION
+#-----------------------------------------------------------------------------
+# Console logging settings
+CONTAINER_LOG_LEVEL=${CONTAINER_LOG_LEVEL:-"NOTICE"}
+CONTAINER_LOG_PREFIX_DATE_FMT=${CONTAINER_LOG_PREFIX_DATE_FMT:-"%Y-%m-%d"}
+CONTAINER_LOG_PREFIX_SEPERATOR=${CONTAINER_LOG_PREFIX_SEPERATOR:-"."}
+CONTAINER_LOG_PREFIX_TIME_FMT=${CONTAINER_LOG_PREFIX_TIME_FMT:-"%H:%M:%S"}
+
+# File logging settings
+CONTAINER_LOG_FILE_NAME=${CONTAINER_LOG_FILE_NAME:-"container.log"}
+CONTAINER_LOG_FILE_LEVEL=${CONTAINER_LOG_FILE_LEVEL:-"DEBUG"}
+CONTAINER_LOG_FILE_PATH=${CONTAINER_LOG_FILE_PATH:-"/var/log/container/"}
+CONTAINER_LOG_FILE_PREFIX_DATE_FMT=${CONTAINER_LOG_FILE_PREFIX_DATE_FMT:-"%Y-%m-%d"}
+CONTAINER_LOG_FILE_PREFIX_SEPERATOR=${CONTAINER_LOG_FILE_PREFIX_SEPERATOR:-"."}
+CONTAINER_LOG_FILE_PREFIX_TIME_FMT=${CONTAINER_LOG_FILE_PREFIX_TIME_FMT:-"%H:%M:%S"}
+
+#-----------------------------------------------------------------------------
+# PROCESS MANAGEMENT
+#-----------------------------------------------------------------------------
+# Process helper configuration
+CONTAINER_PROCESS_HELPER_DATE_FMT=${CONTAINER_PROCESS_HELPER_DATE_FMT:-"%Y-%m-%d"}
+CONTAINER_PROCESS_HELPER_PATH=${CONTAINER_PROCESS_HELPER_PATH:-"/assets/container/processhelper/"}
+CONTAINER_PROCESS_HELPER_SCRIPT=${CONTAINER_PROCESS_HELPER_SCRIPT:-"processhelper.sh"}
+CONTAINER_PROCESS_HELPER_TIME_FMT=${CONTAINER_PROCESS_HELPER_TIME_FMT:-"%H:%M:%S"}
+
+# Runaway process protection
+CONTAINER_PROCESS_RUNAWAY_PROTECTOR=${CONTAINER_PROCESS_RUNAWAY_PROTECTOR:-"TRUE"}
+CONTAINER_PROCESS_RUNAWAY_DELAY=${CONTAINER_PROCESS_RUNAWAY_DELAY:-"1"}
+CONTAINER_PROCESS_RUNAWAY_LIMIT=${CONTAINER_PROCESS_RUNAWAY_LIMIT:-"50"}
+CONTAINER_PROCESS_RUNAWAY_SHOW_OUTPUT_FINAL=${CONTAINER_PROCESS_RUNAWAY_SHOW_OUTPUT_FINAL:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# CUSTOM PATHS AND EXTENSIONS
+#-----------------------------------------------------------------------------
+# User-defined customization locations
+CONTAINER_CUSTOM_PATH=${CONTAINER_CUSTOM_PATH:-"/assets/custom/"}
+CONTAINER_CUSTOM_SCRIPTS_PATH=${CONTAINER_CUSTOM_SCRIPTS_PATH:-"/assets/custom-scripts/"}
+CONTAINER_SCHEDULING_LOCATION=${CONTAINER_SCHEDULING_LOCATION:-"/assets/cron/"}
+
+#-----------------------------------------------------------------------------
+# SCRIPT UTILITIES
+#-----------------------------------------------------------------------------
+# Script path detection for relative file operations
+# shellcheck disable=SC2034
+SCRIPTPATH="$(cd "$(dirname "$0")" >/dev/null 2>&1 || exit ; pwd -P)"
