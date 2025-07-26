@@ -1,0 +1,17 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Permissions Default Configuration
+#
+# Purpose: Sets default environment variables for container permissions handling
+# Context: Executed during container initialization by s6-overlay to establish
+#          permission-related configuration values that can be overridden by environment variables
+# Note: All values use Bash parameter expansion for fallback defaults
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# PERMISSIONS SETTINGS
+#-----------------------------------------------------------------------------
+# Debug and troubleshooting options for permissions handling
+DEBUG_PERMISSIONS=${DEBUG_PERMISSIONS:-"FALSE"}
