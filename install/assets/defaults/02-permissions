@@ -1,0 +1,16 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Permissions Configuration
+#
+# Purpose: Defines permission-related environment variables for container
+# Context: Loaded during container initialization to configure file permissions
+# Note: Debug mode can be enabled to troubleshoot permission issues
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# DEBUG CONFIGURATION
+#-----------------------------------------------------------------------------
+# Enable debug mode for permission-related operations
+DEBUG_PERMISSIONS=${DEBUG_PERMISSIONS:-"FALSE"}
