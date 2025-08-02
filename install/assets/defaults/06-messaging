@@ -1,0 +1,33 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Messaging Configuration
+#
+# Purpose: Defines SMTP email environment variables for container messaging
+# Context: Loaded during container initialization to configure email services
+# Note: TLS settings are disabled by default for internal container communication
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SMTP SERVER CONFIGURATION
+#-----------------------------------------------------------------------------
+# SMTP server connection settings and authentication
+SMTP_HOST=${SMTP_HOST:-"postfix-relay"}
+SMTP_PORT=${SMTP_PORT:-"25"}
+SMTP_DOMAIN=${SMTP_DOMAIN:-"${IMAGE_NAME}"}
+SMTP_MAILDOMAIN=${SMTP_MAILDOMAIN:-"local"}
+
+#-----------------------------------------------------------------------------
+# SMTP SECURITY SETTINGS
+#-----------------------------------------------------------------------------
+# TLS and security configuration for email transmission
+SMTP_TLS=${SMTP_TLS:-"FALSE"}
+SMTP_STARTTLS=${SMTP_STARTTLS:-"FALSE"}
+SMTP_TLSCERTCHECK=${SMTP_TLSCERTCHECK:-"FALSE"}
+
+#-----------------------------------------------------------------------------
+# SMTP BEHAVIOR SETTINGS
+#-----------------------------------------------------------------------------
+# Email behavior and formatting configuration
+SMTP_AUTO_FROM=${SMTP_AUTO_FROM:-"FALSE"}

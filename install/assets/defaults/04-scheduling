@@ -1,0 +1,18 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Scheduling Configuration
+#
+# Purpose: Defines cron job logging environment variables for container
+# Context: Loaded during container initialization to configure scheduling logs
+# Note: Log level 8 provides detailed cron execution information
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SCHEDULING LOG CONFIGURATION
+#-----------------------------------------------------------------------------
+# Cron job logging settings and file paths
+SCHEDULING_LOG_TYPE=${SCHEDULING_LOG_TYPE:-"FILE"}
+SCHEDULING_LOG_LOCATION=${SCHEDULING_LOG_LOCATION:-"/var/log/cron/"}
+SCHEDULING_LOG_LEVEL=${SCHEDULING_LOG_LEVEL:-"8"}
