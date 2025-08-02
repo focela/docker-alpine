@@ -93,13 +93,28 @@ FLUENTBIT_TAIL_KEY_OFFSET=${FLUENTBIT_TAIL_KEY_OFFSET:-"offset"}
 # OS-DEPENDENT COMPRESSION TYPE DETECTION
 #-----------------------------------------------------------------------------
 # Automatically determine log rotation compression type based on OS version
-case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2)" in
-  "3.5" | "3.8" )
-    # Alpine Linux 3.5 and 3.8 use gzip compression
-    LOGROTATE_COMPRESSION_TYPE="gzip"
+os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
+case ${os} in
+  "alpine" )
+    # Alpine Linux version detection for compression type selection
+    version_id=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | tr -d '"')
+    if [ "$version_id" = "edge" ]; then
+      # Edge version uses zstd compression
+      LOGROTATE_COMPRESSION_TYPE=${LOGROTATE_COMPRESSION_TYPE:-"zstd"}
+    else
+      # For numeric versions, extract the minor version number for comparison
+      osver=$(echo "$version_id" | cut -d . -f 2 | cut -d _ -f 1)
+      if [ -n "$osver" ] && [ "$osver" -le 8 ]; then
+        # Alpine Linux 3.5 and 3.8 use gzip compression
+        LOGROTATE_COMPRESSION_TYPE=${LOGROTATE_COMPRESSION_TYPE:-"gzip"}
+      else
+        # Newer Alpine versions use zstd compression
+        LOGROTATE_COMPRESSION_TYPE=${LOGROTATE_COMPRESSION_TYPE:-"zstd"}
+      fi
+    fi
   ;;
   * )
-    # Newer Alpine versions and other OS use zstd compression
+    # Non-Alpine systems use zstd compression
     LOGROTATE_COMPRESSION_TYPE=${LOGROTATE_COMPRESSION_TYPE:-"zstd"}
   ;;
 esac
