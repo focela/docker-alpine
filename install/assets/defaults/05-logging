@@ -1,0 +1,124 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Logging Configuration Variables
+#
+# Purpose: Defines default environment variables for logging and log shipping
+# Context: Loaded during container initialization to configure logging systems
+# Note: Fluent Bit and logrotate settings with OS-specific fallback defaults
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT BASIC CONFIGURATION
+#-----------------------------------------------------------------------------
+# Core Fluent Bit settings and mode configuration
+FLUENTBIT_MODE=${FLUENTBIT_MODE:-"NORMAL"}
+FLUENTBIT_SETUP_TYPE=${FLUENTBIT_SETUP_TYPE:-"AUTO"}
+FLUENTBIT_OUTPUT=${FLUENTBIT_OUTPUT:-"FORWARD"}
+
+# Configuration files
+FLUENTBIT_CONFIG_PARSERS=${FLUENTBIT_CONFIG_PARSERS:-"parsers.conf"}
+FLUENTBIT_CONFIG_PLUGINS=${FLUENTBIT_CONFIG_PLUGINS:-"plugins.conf"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT LOGGING SETTINGS
+#-----------------------------------------------------------------------------
+# Log file and level configuration
+FLUENTBIT_LOG_FILE=${FLUENTBIT_LOG_FILE:-"fluentbit.log"}
+FLUENTBIT_LOG_LEVEL=${FLUENTBIT_LOG_LEVEL:-"info"}
+FLUENTBIT_LOG_PATH=${FLUENTBIT_LOG_PATH:-"/var/log/fluentbit/"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT HTTP SERVER
+#-----------------------------------------------------------------------------
+# HTTP server configuration for monitoring and metrics
+FLUENTBIT_ENABLE_HTTP_SERVER=${FLUENTBIT_ENABLE_HTTP_SERVER:-"TRUE"}
+FLUENTBIT_HTTP_LISTEN_IP=${FLUENTBIT_HTTP_LISTEN_IP:-"0.0.0.0"}
+FLUENTBIT_HTTP_LISTEN_PORT=${FLUENTBIT_HTTP_LISTEN_PORT:-"2020"}
+
+# Storage metrics configuration
+FLUENTBIT_ENABLE_STORAGE_METRICS=${FLUENTBIT_ENABLE_STORAGE_METRICS:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT PERFORMANCE SETTINGS
+#-----------------------------------------------------------------------------
+# Buffer and flush configuration
+FLUENTBIT_FLUSH_SECONDS=${FLUENTBIT_FLUSH_SECONDS:-"1"}
+FLUENTBIT_GRACE_SECONDS=${FLUENTBIT_GRACE_SECONDS:-"1"}
+
+# Forward buffer settings
+FLUENTBIT_FORWARD_BUFFER_CHUNK_SIZE=${FLUENTBIT_FORWARD_BUFFER_CHUNK_SIZE:-"1M"}
+FLUENTBIT_FORWARD_BUFFER_MAX_SIZE=${FLUENTBIT_FORWARD_BUFFER_MAX_SIZE:-"6M"}
+FLUENTBIT_FORWARD_PORT=${FLUENTBIT_FORWARD_PORT:-"24224"}
+
+# Tail buffer settings
+FLUENTBIT_TAIL_BUFFER_CHUNK_SIZE=${FLUENTBIT_TAIL_BUFFER_CHUNK_SIZE:-"32k"}
+FLUENTBIT_TAIL_BUFFER_MAX_SIZE=${FLUENTBIT_TAIL_BUFFER_MAX_SIZE:-"32k"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT STORAGE CONFIGURATION
+#-----------------------------------------------------------------------------
+# Storage settings for data persistence
+FLUENTBIT_STORAGE_PATH=${FLUENTBIT_STORAGE_PATH:-"/tmp/fluentbit/storage"}
+FLUENTBIT_STORAGE_BACKLOG_LIMIT=${FLUENTBIT_STORAGE_BACKLOG_LIMIT:-"5M"}
+FLUENTBIT_STORAGE_CHECKSUM=${FLUENTBIT_STORAGE_CHECKSUM:-"FALSE"}
+FLUENTBIT_STORAGE_SYNC=${FLUENTBIT_STORAGE_SYNC:-"normal"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT TAIL INPUT SETTINGS
+#-----------------------------------------------------------------------------
+# File tailing configuration
+FLUENTBIT_TAIL_READ_FROM_HEAD=${FLUENTBIT_TAIL_READ_FROM_HEAD:-"FALSE"}
+FLUENTBIT_TAIL_SKIP_EMPTY_LINES=${FLUENTBIT_TAIL_SKIP_EMPTY_LINES:-"TRUE"}
+FLUENTBIT_TAIL_SKIP_LONG_LINES=${FLUENTBIT_TAIL_SKIP_LONG_LINES:-"TRUE"}
+
+# Tail database settings
+FLUENTBIT_TAIL_DB_ENABLE=${FLUENTBIT_TAIL_DB_ENABLE:-"TRUE"}
+FLUENTBIT_TAIL_DB_SYNC=${FLUENTBIT_TAIL_DB_SYNC:-"normal"}
+FLUENTBIT_TAIL_DB_LOCK=${FLUENTBIT_TAIL_DB_LOCK:-"TRUE"}
+FLUENTBIT_TAIL_DB_JOURNAL_MODE=${FLUENTBIT_TAIL_DB_JOURNAL_MODE:-"WAL"}
+
+# Tail key configuration
+FLUENTBIT_TAIL_KEY_PATH_ENABLE=${FLUENTBIT_TAIL_KEY_PATH_ENABLE:-"TRUE"}
+FLUENTBIT_TAIL_KEY_PATH=${FLUENTBIT_TAIL_KEY_PATH:-"filename"}
+FLUENTBIT_TAIL_KEY_OFFSET_ENABLE=${FLUENTBIT_TAIL_KEY_OFFSET_ENABLE:-"FALSE"}
+FLUENTBIT_TAIL_KEY_OFFSET=${FLUENTBIT_TAIL_KEY_OFFSET:-"offset"}
+
+#-----------------------------------------------------------------------------
+# FLUENT BIT OUTPUT CONFIGURATION
+#-----------------------------------------------------------------------------
+# Forward output settings
+FLUENTBIT_OUTPUT_FORWARD_HOST=${FLUENTBIT_OUTPUT_FORWARD_HOST:-"fluent-proxy"}
+FLUENTBIT_OUTPUT_FORWARD_TLS=${FLUENTBIT_OUTPUT_FORWARD_TLS:-"FALSE"}
+FLUENTBIT_OUTPUT_FORWARD_TLS_VERIFY=${FLUENTBIT_OUTPUT_FORWARD_TLS_VERIFY:-"FALSE"}
+
+# Loki output settings
+FLUENTBIT_OUTPUT_LOKI_HOST=${FLUENTBIT_OUTPUT_LOKI_HOST:-"loki"}
+FLUENTBIT_OUTPUT_LOKI_PORT=${FLUENTBIT_OUTPUT_LOKI_PORT:-"3100"}
+FLUENTBIT_OUTPUT_LOKI_TLS=${FLUENTBIT_OUTPUT_LOKI_TLS:-"FALSE"}
+FLUENTBIT_OUTPUT_LOKI_TLS_VERIFY=${FLUENTBIT_OUTPUT_LOKI_TLS_VERIFY:-"FALSE"}
+FLUENTBIT_OUTPUT_LOKI_COMPRESS_GZIP=${FLUENTBIT_OUTPUT_LOKI_COMPRESS_GZIP:-"gzip"}
+
+#-----------------------------------------------------------------------------
+# LOGROTATE CONFIGURATION
+#-----------------------------------------------------------------------------
+# Log rotation settings and compression configuration
+LOGROTATE_COMPRESSION_VALUE=${LOGROTATE_COMPRESSION_VALUE:-"8"}
+LOGROTATE_RETAIN_DAYS=${LOGROTATE_RETAIN_DAYS:-"7"}
+LOGSHIPPING_AUTO_CONFIG_LOGROTATE=${LOGSHIPPING_AUTO_CONFIG_LOGROTATE:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# OS-SPECIFIC COMPRESSION TYPE DETECTION
+#-----------------------------------------------------------------------------
+# Detect OS version and set appropriate compression type for logrotate
+case "$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 1,2)" in
+  "3.5" | "3.8" )
+    # Older Alpine versions use gzip compression
+    LOGROTATE_COMPRESSION_TYPE="gzip"
+  ;;
+  * )
+    # Newer versions use zstd compression for better performance
+    LOGROTATE_COMPRESSION_TYPE=${LOGROTATE_COMPRESSION_TYPE:-"zstd"}
+  ;;
+esac

@@ -1,0 +1,33 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Messaging Configuration Variables
+#
+# Purpose: Defines default environment variables for email messaging configuration
+# Context: Loaded during container initialization to configure SMTP settings
+# Note: SMTP-related settings with fallback defaults for email delivery
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SMTP CONNECTION CONFIGURATION
+#-----------------------------------------------------------------------------
+# SMTP server connection settings and domain configuration
+SMTP_HOST=${SMTP_HOST:-"postfix-relay"}
+SMTP_PORT=${SMTP_PORT:-"25"}
+SMTP_DOMAIN=${SMTP_DOMAIN:-"${IMAGE_NAME}"}
+SMTP_MAILDOMAIN=${SMTP_MAILDOMAIN:-"local"}
+
+#-----------------------------------------------------------------------------
+# SMTP SECURITY SETTINGS
+#-----------------------------------------------------------------------------
+# TLS and security configuration for SMTP connections
+SMTP_TLS=${SMTP_TLS:-"FALSE"}
+SMTP_STARTTLS=${SMTP_STARTTLS:-"FALSE"}
+SMTP_TLSCERTCHECK=${SMTP_TLSCERTCHECK:-"FALSE"}
+
+#-----------------------------------------------------------------------------
+# SMTP SENDER CONFIGURATION
+#-----------------------------------------------------------------------------
+# Email sender settings and auto-from configuration
+SMTP_AUTO_FROM=${SMTP_AUTO_FROM:-"FALSE"}
