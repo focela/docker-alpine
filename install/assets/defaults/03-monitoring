@@ -85,8 +85,9 @@ case ${os} in
   "alpine" )
     # Alpine Linux version detection for agent type selection
     version_id=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | tr -d '"')
+    major_version=$(echo "$version_id" | cut -d . -f 1 2>/dev/null || echo "0")
     minor_version=$(echo "$version_id" | cut -d . -f 2 2>/dev/null || echo "0")
-    if [ "$version_id" = "edge" ] || [ "$version_id" != "" ] && [ "$minor_version" -ge 15 ] 2>/dev/null ; then
+    if [ "$version_id" = "edge" ] || ( [ "$major_version" -ge 3 ] && [ "$minor_version" -ge 15 ] ) 2>/dev/null ; then
       ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"modern"}
     else
       ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"classic"}
@@ -95,5 +96,9 @@ case ${os} in
   "debian" | "ubuntu" )
     # Debian/Ubuntu systems use modern agent type
     ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"modern"}
+  ;;
+  * )
+    # Default to classic agent type for unsupported operating systems
+    ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"classic"}
   ;;
 esac
