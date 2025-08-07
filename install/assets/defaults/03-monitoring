@@ -80,12 +80,13 @@ ZABBIX_ENABLE_AUTOREGISTER_DNS=${ZABBIX_ENABLE_AUTOREGISTER_DNS:-"TRUE"}
 # OS-SPECIFIC AGENT TYPE DETECTION
 #-----------------------------------------------------------------------------
 # Detect operating system and set appropriate agent type for modern/classic compatibility
-os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
+os=$(cat /etc/os-release | grep ^ID= | cut -d = -f2 | tr -d '"')
 case ${os} in
   "alpine" )
     # Alpine Linux version detection for agent type selection
     version_id=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | tr -d '"')
-    if [ "$version_id" = "edge" ] || [ "$version_id" != "" ] && [ "$(echo "$version_id" | cut -d . -f 2)" -ge 15 ] 2>/dev/null ; then
+    minor_version=$(echo "$version_id" | cut -d . -f 2 2>/dev/null || echo "0")
+    if [ "$version_id" = "edge" ] || [ "$version_id" != "" ] && [ "$minor_version" -ge 15 ] 2>/dev/null ; then
       ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"modern"}
     else
       ZABBIX_AGENT_TYPE=${ZABBIX_AGENT_TYPE:-"classic"}
