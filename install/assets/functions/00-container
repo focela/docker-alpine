@@ -344,9 +344,9 @@ print_start() {
     process_helper_args="$(date +"${CONTAINER_PROCESS_HELPER_DATE_FMT}") $(date +"${CONTAINER_PROCESS_HELPER_TIME_FMT}") $(basename "$(pwd)") ${process_restart_count} $(cat /etc/hostname)"
     if [ -d "${CONTAINER_PROCESS_HELPER_PATH}" ]; then
       if [ -f "${CONTAINER_PROCESS_HELPER_PATH}"/"$(basename $0)".sh ]; then
-        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"$(basename $0)".sh "${process_helper_args}"
+        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"$(basename $0)".sh $process_helper_args
       elif [ -f "${CONTAINER_PROCESS_HELPER_PATH}"/"${CONTAINER_PROCESS_HELPER_SCRIPT}".sh ] ; then
-        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"${CONTAINER_PROCESS_HELPER_SCRIPT}".sh "${process_helper_args}"
+        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"${CONTAINER_PROCESS_HELPER_SCRIPT}".sh $process_helper_args
       fi
     fi
 
@@ -455,7 +455,7 @@ display_container_banner() {
 # Clone a git repository with depth control and submodule support
 clone_git_repo() {
   set +x
-  if [ ${DEBUG_MODE,,} = "true" ] ; then set -x ; fi
+  if [ "${DEBUG_MODE,,}" = "true" ] ; then set -x ; fi
   
   # Verify git is available
   if ! [ -x "$(command -v git)" ]; then
@@ -508,7 +508,7 @@ clone_git_repo() {
     echo "[clone_git_repo] You tried to call the function but there's no arguments"
     exit 1
   fi
-  if [ ${DEBUG_MODE,,} = "true" ] ; then set -x ; fi
+  if [ "${DEBUG_MODE,,}" = "true" ] ; then set -x ; fi
 }
 
 #-----------------------------------------------------------------------------
@@ -942,7 +942,7 @@ get_image_version() {
 # Add host overrides to /etc/hosts from CONTAINER_HOST_OVERRIDE_* variables
 host_override() {
   # Get all host override variables and process them directly
-  printenv | sort | grep -E '^CONTAINER_HOST_OVERRIDE_([0-9].)' | while IFS='=' read -r var_name var_value; do
+  printenv | sort | grep -E '^CONTAINER_HOST_OVERRIDE_[0-9]+' | while IFS='=' read -r var_name var_value; do
     # Extract the index from the variable name
     host_index=$(echo "$var_name" | sed 's/^CONTAINER_HOST_OVERRIDE_//')
     
@@ -955,7 +955,20 @@ host_override() {
 
     # Resolve hostname to IP if not already an IP address
     if [[ ! "${host_ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      host_ip="$(getent ahostsv4 "${host_ip}" | grep -m 1 STREAM  | awk '{print $1}')"
+      resolved_ip="$(getent ahostsv4 "${host_ip}" | grep -m 1 STREAM  | awk '{print $1}')"
+      # Only use resolved IP if it's not empty
+      if [ -n "$resolved_ip" ]; then
+        host_ip="$resolved_ip"
+      else
+        print_warn "Failed to resolve hostname: ${host_ip} for variable ${var_name}"
+        continue
+      fi
+    fi
+
+    # Skip if host_ip is empty after resolution
+    if [ -z "$host_ip" ]; then
+      print_warn "Empty IP address for variable ${var_name}, skipping"
+      continue
     fi
 
     # Add host entry to /etc/hosts
@@ -1334,6 +1347,7 @@ EOF
       if [ -n "${DB_PORT_FILE}" ] ; then redis_port="$(cat "${DB_PORT_FILE}")" ; fi ;
       if [ -n "${REDIS_PORT}" ] ; then redis_port=${REDIS_PORT} ; fi ;
       redis_port=${redis_port:-6379}
+      transform_file_var DB_HOST
       if [ -n "${DB_HOST}" ] ; then redis_host=${DB_HOST} ; fi ;
       if [ -n "${REDIS_HOST}" ] ; then redis_host=${REDIS_HOST} ; fi ;
       retry_counter=0
@@ -1349,13 +1363,14 @@ EOF
       if [ -n "${DB_PORT_FILE}" ] ; then rethink_port="$(cat "${DB_PORT_FILE}")" ; fi ;
       if [ -n "${RETHINK_PORT}" ] ; then rethink_port=${RETHINK_PORT} ; fi ;
       rethink_port=${rethink_port:-28015}
+      transform_file_var DB_HOST
       if [ -n "${DB_HOST}" ] ; then rethink_host=${DB_HOST} ; fi ;
       if [ -n "${RETHINK_HOST}" ] ; then rethink_host=${RETHINK_HOST} ; fi ;
       retry_counter=0
       while ! (nc -z "${rethink_host}" "${rethink_port}") ; do
         sleep 5
         (( retry_counter+=5 ))
-        print_warn "RethinkDB Host '${DB_HOST}' is not accessible, retrying.. ($retry_counter seconds so far)"
+        print_warn "RethinkDB Host '${rethink_host}' is not accessible, retrying.. ($retry_counter seconds so far)"
       done
     ;;
   esac
@@ -1579,7 +1594,7 @@ grant_sudo() {
       sudo_command="ALL"
     fi
     print_debug "Adding Sudo privileges to '$1' for '${sudo_command}' command"
-    echo "%$1 ALL=(ALL) NOPASSWD:${sudo_command}" >> /etc/sudoers
+    echo "$1 ALL=(ALL) NOPASSWD:${sudo_command}" >> /etc/sudoers
   fi
   output_on
 }
@@ -1631,17 +1646,33 @@ package() {
     case "${distro}" in
       "alpine" )
         # Handle dependency packages (prefixed with .)
-        if [[ "${1}" =~ ^\..* ]] ; then
-          local dependencies="-t"
+        local has_dependencies=false
+        for arg in "$@"; do
+          if [[ "${arg}" =~ ^\..* ]]; then
+            has_dependencies=true
+            break
+          fi
+        done
+        
+        if [[ "${has_dependencies}" = "true" ]]; then
+          apk add -t $@
+        else
+          apk add $@
         fi
-        apk add ${dependencies} $@
       ;;
       "debian" | "ubuntu" )
-        # Skip dependency prefix for apt
-        if [[ "${1}" =~ ^\..* ]] ; then
-          shift
-        fi
-        apt-get install -y --no-install-recommends $@
+        # Process dependency prefixes for apt (only from package arguments that start with .)
+        local cleaned_arguments=""
+        for arg in "$@"; do
+          if [[ "${arg}" =~ ^\..* ]]; then
+            # Remove leading dot prefix for dependency packages
+            cleaned_arguments="${cleaned_arguments} ${arg#.}"
+          else
+            # Keep package name as-is if it doesn't start with dot
+            cleaned_arguments="${cleaned_arguments} ${arg}"
+          fi
+        done
+        apt-get install -y --no-install-recommends ${cleaned_arguments}
       ;;
     esac
   }
@@ -1654,11 +1685,18 @@ package() {
       ;;
       "debian" | "ubuntu" )
         local packages="$@"
-        # Remove dependency prefix for apt
-        if [[ "${packages}" =~ \..* ]] ; then
-          packages=$(echo "${packages}" | sed "s|\..* ||g")
-        fi
-        apt-get purge -y ${packages}
+        # Remove dependency prefix for apt (only from package arguments that start with .)
+        local cleaned_packages=""
+        for package in $packages; do
+          if [[ "${package}" =~ ^\..* ]]; then
+            # Remove leading dot prefix for dependency packages
+            cleaned_packages="${cleaned_packages} ${package#.}"
+          else
+            # Keep package name as-is if it doesn't start with dot
+            cleaned_packages="${cleaned_packages} ${package}"
+          fi
+        done
+        apt-get purge -y ${cleaned_packages}
         apt-get autoremove -y
       ;;
     esac
