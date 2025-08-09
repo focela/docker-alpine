@@ -682,8 +682,9 @@ update_template() {
     [[ ! -f "${template_file}" ]] && return 1
 
     template_var_list=($@)
-    # Portable way to get file owner - works on both Alpine and Debian
+    # Portable way to get file owner and group - works on both Alpine and Debian
     template_owner=$(ls -ld "${template_file}" | awk '{print $3}')
+    template_group=$(ls -ld "${template_file}" | awk '{print $4}')
     template_temp_file=$(mktemp)
     cp -a "${template_file}" "${template_temp_file}"
 
@@ -697,12 +698,11 @@ update_template() {
     # Export variables and process template, preserving original file permissions
     (
       export ${template_var_list[@]}
-      local IFS=":"
       envsubst "${template_var_list[*]/#/$}" < "${template_temp_file}" > "${template_file}"
     )
 
     # Restore original file ownership and permissions
-    chown "${template_owner}" "${template_file}"
+    chown "${template_owner}:${template_group}" "${template_file}"
     chmod "$(stat -c %a "${template_temp_file}" 2>/dev/null || stat -f %Lp "${template_temp_file}" 2>/dev/null || echo "644")" "${template_file}"
 
     rm -f "${template_temp_file}"
@@ -981,16 +981,26 @@ host_override() {
       continue
     fi
     
-    host_ip=$(echo "$var_value" | awk '{print $1}')
+    # Check if value already starts with an IP address
+    if [[ "${var_value}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+      # Value starts with IP, extract it and the rest as hostname
+      host_ip=$(echo "$var_value" | awk '{print $1}')
+      hostname_part=$(echo "$var_value" | awk '{$1=""; print $0}' | sed 's/^ *//')
+    else
+      # Value doesn't start with IP, treat first word as hostname to resolve
+      hostname_part=$(echo "$var_value" | awk '{print $1}')
+      host_ip=""
+    fi
 
     # Resolve hostname to IP if not already an IP address
-    if [[ ! "${host_ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      resolved_ip="$(getent ahostsv4 "${host_ip}" | grep -m 1 STREAM  | awk '{print $1}')"
+    if [ -z "$host_ip" ]; then
+      # Use portable hostname resolution method available on Alpine
+      resolved_ip="$(getent hosts "${hostname_part}" | awk '{print $1}' | head -n1)"
       # Only use resolved IP if it's not empty
       if [ -n "$resolved_ip" ]; then
         host_ip="$resolved_ip"
       else
-        print_warn "Failed to resolve hostname: ${host_ip} for variable ${var_name}"
+        print_warn "Failed to resolve hostname: ${hostname_part} for variable ${var_name}"
         continue
       fi
     fi
@@ -1003,7 +1013,7 @@ host_override() {
 
     # Add host entry to /etc/hosts
     echo "# Added automatically by $var_name" >> /etc/hosts
-    echo "${host_ip} ${var_value}" >> /etc/hosts
+    echo "${host_ip} ${hostname_part}" >> /etc/hosts
   done
 }
 
