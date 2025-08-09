@@ -682,7 +682,8 @@ update_template() {
     [[ ! -f "${template_file}" ]] && return 1
 
     template_var_list=($@)
-    template_owner=$(stat -c %U "${template_file}")
+    # Portable way to get file owner - works on both Alpine and Debian
+    template_owner=$(ls -ld "${template_file}" | awk '{print $3}')
     template_temp_file=$(mktemp)
     cp -a "${template_file}" "${template_temp_file}"
 
@@ -693,10 +694,16 @@ update_template() {
     done
 
     # Process template with environment substitution
+    # Export variables and process template, preserving original file permissions
     (
       export ${template_var_list[@]}
-      local IFS=":"; sudo -HEu ${template_owner} envsubst "${template_var_list[*]/#/$}" < "${template_temp_file}" > "${template_file}"
+      local IFS=":"
+      envsubst "${template_var_list[*]/#/$}" < "${template_temp_file}" > "${template_file}"
     )
+
+    # Restore original file ownership and permissions
+    chown "${template_owner}" "${template_file}"
+    chmod "$(stat -c %a "${template_temp_file}" 2>/dev/null || stat -f %Lp "${template_temp_file}" 2>/dev/null || echo "644")" "${template_file}"
 
     rm -f "${template_temp_file}"
   done
@@ -996,7 +1003,7 @@ host_override() {
 
     # Add host entry to /etc/hosts
     echo "# Added automatically by $var_name" >> /etc/hosts
-    echo "${host_ip} $(echo "$var_value" | cut -d' ' -f2-)" >> /etc/hosts
+    echo "${host_ip} ${var_value}" >> /etc/hosts
   done
 }
 
@@ -1248,6 +1255,8 @@ db_ready() {
       fi
       # Disable SSL for database connectivity checks
       if [ ! -f /etc/my.cnf.d/disable-ssl.cnf ] ; then
+        # Ensure the directory exists before creating the file
+        mkdir -p /etc/my.cnf.d
         cat <<EOF > /etc/my.cnf.d/disable-ssl.cnf
 [client]
 ssl=FALSE
