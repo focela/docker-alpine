@@ -695,10 +695,16 @@ update_template() {
     done
 
     # Process template with environment substitution
-    # Export variables and process template, preserving original file permissions
     (
-      export ${template_var_list[@]}
-      envsubst "${template_var_list[*]/#/$}" < "${template_temp_file}" > "${template_file}"
+      # Only export variables if template_var_list is not empty to prevent data leakage
+      if [ ${#template_var_list[@]} -gt 0 ]; then
+        export "${template_var_list[@]}"
+        # Use proper envsubst syntax: pass variable names without $ prefix
+        envsubst "$(printf '${%s} ' "${template_var_list[@]}")" < "${template_temp_file}" > "${template_file}"
+      else
+        # If no variables to substitute, just copy the file
+        cp "${template_temp_file}" "${template_file}"
+      fi
     )
 
     # Restore original file ownership and permissions
