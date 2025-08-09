@@ -45,29 +45,43 @@ check_service_initialized() {
   # Determine initialization mode and service suffix
   if [ "$1" = "init" ]; then
     init_suffix="-init"
-    auto_detect_mode=FALSE
-  else
-    service="$1"
     auto_detect_mode=TRUE
+  else
+    init_suffix=""
+    auto_detect_mode=FALSE
   fi
 
-  # Auto-detect service name when not explicitly provided
-  if [ "$auto_detect_mode" = "FALSE" ] ; then
-    if [ -z "$2" ]; then
-      # Detect service name based on script execution context
+  # Determine service name based on arguments and context
+  if [ "$auto_detect_mode" = "TRUE" ]; then
+    # Auto-detect mode: determine service name from script context
+    case "$(dirname "$0")" in
+      "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+        # Cont-init script: use script filename as service name
+        service=$(basename "$0")
+      ;;
+      *)
+        # Service script: use current directory name as service name
+        service=$(basename "$PWD")
+      ;;
+    esac
+  else
+    # Explicit service mode: use provided service name
+    if [ -n "$1" ]; then
+      service="$1"
+      # If second argument is provided, use it as service name
+      if [ -n "$2" ]; then
+        service="$2"
+      fi
+    else
+      # No arguments provided, fall back to auto-detect
       case "$(dirname "$0")" in
         "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
-          # Cont-init script: use script filename as service name
           service=$(basename "$0")
         ;;
         *)
-          # Service script: use current directory name as service name
           service=$(basename "$PWD")
         ;;
       esac
-    else
-      # Use explicitly provided service name
-      service=$2
     fi
   fi
 
@@ -177,7 +191,7 @@ service_stop() {
 log_prefix() {
   output_off
   if [ "${CONTAINER_ENABLE_LOG_PREFIX,,}" = "true" ] ; then
-    echo "$(date +"${CONTAINER_LOG_PREFIX_DATE_FMT}")${CONTAINER_LOG_PREFIX_SEPERATOR}$(date +"${CONTAINER_PROCESS_HELPER_TIME_FMT}") "
+    echo "$(date +"${CONTAINER_LOG_PREFIX_DATE_FMT}")${CONTAINER_LOG_PREFIX_SEPARATOR}$(date +"${CONTAINER_PROCESS_HELPER_TIME_FMT}") "
   fi
   output_on
 }
@@ -190,7 +204,6 @@ output_off() {
 }
 
 # Enable debug output (turn on set -x) with script-specific conditions
-# Enable debug output (turn on set -x) with script-specific conditions
 output_on() {
   if [ "${DEBUG_MODE,,}" = "true" ] ; then
     case "$(basename "$0")" in
@@ -201,7 +214,7 @@ output_on() {
       run )
         # Handle service run scripts with additional context checking
         case "$PWD" in
-          */0*-* | 99-* )
+          */0*-* | */99-* )
             # Skip debug for run scripts in initialization/cleanup directories
             :
           ;;
@@ -1006,11 +1019,11 @@ set_timezone() {
 #-----------------------------------------------------------------------------
 # Convert true/false values to On/Off
 truefalse_onoff() {
-  value=$(set | grep "${1}"= | cut -d '=' -f2)
-  var=$(set | grep "${1}"= | sed "s/=.*//g")
-
+  # Use indirect expansion for accurate variable access
+  value="${!1}"
+  
   if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'On'"
+    print_debug "Converting Variable Name $1 value to 'On'"
     unset "$1"
     if [ -n "$2" ] ; then
       case "${2,,}" in
@@ -1025,7 +1038,7 @@ truefalse_onoff() {
       export "$1=ON"
     fi
   elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'Off'"
+    print_debug "Converting Variable Name $1 value to 'Off'"
     unset "$1"
     if [ -n "$2" ] ; then
       case "${2,,}" in
@@ -1044,15 +1057,15 @@ truefalse_onoff() {
 
 # Convert true/false values to 1/0
 truefalse_onezero() {
-  value=$(set | grep "${1}"= | cut -d '=' -f2)
-  var=$(set | grep "${1}"= | sed "s/=.*//g")
+  # Use indirect expansion for accurate variable access
+  value="${!1}"
 
   if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
-    print_debug "Converting Variable Name ${var} value to '1'"
+    print_debug "Converting Variable Name $1 value to '1'"
     unset "$1"
     export "$1=1"
   elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
-    print_debug "Converting Variable Name ${var} value to '0'"
+    print_debug "Converting Variable Name $1 value to '0'"
     unset "$1"
     export "$1=0"
   fi
@@ -1060,11 +1073,11 @@ truefalse_onezero() {
 
 # Convert true/false values to yes/no
 truefalse_yesno() {
-  value=$(set | grep "${1}"= | cut -d '=' -f2)
-  var=$(set | grep "${1}"= | sed "s/=.*//g")
+  # Use indirect expansion for accurate variable access
+  value="${!1}"
 
   if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'yes'"
+    print_debug "Converting Variable Name $1 value to 'yes'"
     unset "$1"
     if [ -n "$2" ] ; then
       case "${2,,}" in
@@ -1079,7 +1092,7 @@ truefalse_yesno() {
       export "$1=yes"
     fi
   elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'no'"
+    print_debug "Converting Variable Name $1 value to 'no'"
     unset "$1"
     if [ -n "$2" ] ; then
       case "${2,,}" in
@@ -1118,11 +1131,11 @@ var_true() {
 
 # Convert yes/no values to true/false
 yesno_truefalse() {
-  value=$(set | grep "${1}"= | cut -d '=' -f2)
-  var=$(set | grep "${1}"= | sed "s/=.*//g")
+  # Use indirect expansion for accurate variable access
+  value="${!1}"
 
   if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'true'"
+    print_debug "Converting Variable Name $1 value to 'true'"
     unset "$1"
     if [ -n "$2" ] ; then
       case "${2,,}" in
@@ -1137,10 +1150,10 @@ yesno_truefalse() {
       export "$1=TRUE"
     fi
   elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
-    print_debug "Converting Variable Name ${var} value to 'false'"
+    print_debug "Converting Variable Name $1 value to 'false'"
     unset "$1"
     if [ -n "$2" ] ; then
-      case "$2" in
+      case "${2,,}" in
         "uppercase" | "upper" | "uc" )
           export "$1=FALSE"
         ;;
@@ -1302,9 +1315,12 @@ EOF
       
       # Handle password configuration with priority: *_FILE > environment variable
       if [ -n "${DB_PASS_FILE}" ] ; then postgres_pass="$(cat "${DB_PASS_FILE}")" ; fi ;
+      if [ -n "${POSTGRES_PASS_FILE}" ] ; then postgres_pass="$(cat "${POSTGRES_PASS_FILE}")" ; fi ;
       if [ -n "${PGPASSWORD_FILE}" ] ; then postgres_pass="$(cat "${PGPASSWORD_FILE}")" ; fi ;
       transform_file_var DB_PASS
       if [ -n "${DB_PASS}" ] ; then postgres_pass=${DB_PASS} ; fi ;
+      transform_file_var POSTGRES_PASS
+      if [ -n "${POSTGRES_PASS}" ] ; then postgres_pass=${POSTGRES_PASS} ; fi ;
       transform_file_var PGPASSWORD
       if [ -n "${PGPASSWORD}" ] ; then postgres_pass=${PGPASSWORD} ; fi ;
       
@@ -1388,8 +1404,10 @@ sanity_db() {
         if [ -n "${DB_HOST}" ] ; then couch_host=${DB_HOST} ; fi ;
         transform_file_var COUCH_HOST
         if [ -n "${COUCH_HOST}" ] ; then couch_host=${COUCH_HOST} ; fi ;
+        transform_file_var COUCHDB_HOST
+        if [ -n "${COUCHDB_HOST}" ] ; then couch_host=${COUCHDB_HOST} ; fi ;
         if [ -z "${couch_host}" ] ; then
-          print_error "No Couch Database Host Entered! - Set '\$DB_HOST' or '\$COUCH_HOST'"
+          print_error "No Couch Database Host Entered! - Set '\$DB_HOST', '\$COUCH_HOST', or '\$COUCHDB_HOST'"
           exit 1
         fi
       ;;
@@ -1399,8 +1417,10 @@ sanity_db() {
         if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
         transform_file_var INFLUX_HOST
         if [ -n "${INFLUX_HOST}" ] ; then influx_host=${INFLUX_HOST} ; fi ;
+        transform_file_var INFLUXDB_HOST
+        if [ -n "${INFLUXDB_HOST}" ] ; then influx_host=${INFLUXDB_HOST} ; fi ;
         if [ -z "${influx_host}" ] ; then
-          print_error "No Influx Database Host Entered! - Set '\$DB_HOST' or '\$INFLUX_HOST'"
+          print_error "No Influx Database Host Entered! - Set '\$DB_HOST', '\$INFLUX_HOST', or '\$INFLUXDB_HOST'"
           exit 1
         fi
       ;;
@@ -1470,6 +1490,8 @@ sanity_db() {
         if [ -n "${POSTGRES_USER}" ] ; then postgres_user=${POSTGRES_USER} ; fi ;
         transform_file_var DB_PASS
         if [ -n "${DB_PASS}" ] ; then postgres_pass=${DB_PASS} ; fi ;
+        transform_file_var POSTGRES_PASS
+        if [ -n "${POSTGRES_PASS}" ] ; then postgres_pass=${POSTGRES_PASS} ; fi ;
         transform_file_var PGPASSWORD
         if [ -n "${PGPASSWORD}" ] ; then postgres_pass=${PGPASSWORD} ; fi ;
         transform_file_var DB_NAME
@@ -1645,20 +1667,18 @@ package() {
   install() {
     case "${distro}" in
       "alpine" )
-        # Handle dependency packages (prefixed with .)
-        local has_dependencies=false
+        # Process dependency prefixes for apk (only from package arguments that start with .)
+        local cleaned_arguments=""
         for arg in "$@"; do
           if [[ "${arg}" =~ ^\..* ]]; then
-            has_dependencies=true
-            break
+            # Remove leading dot prefix for dependency packages
+            cleaned_arguments="${cleaned_arguments} ${arg#.}"
+          else
+            # Keep package name as-is if it doesn't start with dot
+            cleaned_arguments="${cleaned_arguments} ${arg}"
           fi
         done
-        
-        if [[ "${has_dependencies}" = "true" ]]; then
-          apk add -t $@
-        else
-          apk add $@
-        fi
+        apk add ${cleaned_arguments}
       ;;
       "debian" | "ubuntu" )
         # Process dependency prefixes for apt (only from package arguments that start with .)
@@ -1681,7 +1701,18 @@ package() {
   remove() {
     case "${distro}" in
       "alpine" )
-        apk del $@
+        # Process dependency prefixes for apk (only from package arguments that start with .)
+        local cleaned_packages=""
+        for package in "$@"; do
+          if [[ "${package}" =~ ^\..* ]]; then
+            # Remove leading dot prefix for dependency packages
+            cleaned_packages="${cleaned_packages} ${package#.}"
+          else
+            # Keep package name as-is if it doesn't start with dot
+            cleaned_packages="${cleaned_packages} ${package}"
+          fi
+        done
+        apk del ${cleaned_packages}
       ;;
       "debian" | "ubuntu" )
         local packages="$@"
