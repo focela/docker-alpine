@@ -185,7 +185,7 @@ service_start() {
 
 # Disable a service by marking it as DONOTSTART
 service_stop() {
-  echo "DONOTSTART added by $(basename \""$0"\")" >> /tmp/.container/"${1}"-init
+  echo "DONOTSTART added by $(basename "$0")" >> /tmp/.container/"${1}"-init
 }
 
 #-----------------------------------------------------------------------------
@@ -1225,7 +1225,7 @@ db_ready() {
       if [ -n "${DB_PORT}" ] ; then influx_port=${DB_PORT} ; fi ;
       transform_file_var INFLUXDB_PORT
       if [ -n "${INFLUXDB_PORT}" ] ; then influx_port=${INFLUXDB_PORT} ; fi ;
-      influx_port=${influx_port:-8088}
+      influx_port=${influx_port:-8086}
       transform_file_var DB_HOST
       if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
       transform_file_var INFLUXDB_HOST
@@ -1827,8 +1827,8 @@ case "${DEBUG_MODE}" in
   * )
     # Script-specific debug mode - enables debug only for matching script names
     if [ "$(dirname "$0")" = "/var/run/s6/etc/cont-init.d" ] || [ "$(dirname "$0")" = "/etc/cont-init.d" ]; then
-      if [ "${DEBUG_MODE}" = "$(basename \""$0"\")" ] ; then
-        print_notice "Enabling Debug mode for $(basename \""$0"\") scripts"
+      if [ "${DEBUG_MODE}" = "$(basename "$0")" ] ; then
+        print_notice "Enabling Debug mode for $(basename "$0") scripts"
         set -x
       fi
     fi
