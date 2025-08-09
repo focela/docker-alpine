@@ -15,13 +15,13 @@ source /assets/defaults/00-container
 #-----------------------------------------------------------------------------
 # TERMINAL COLOR DEFINITIONS
 #-----------------------------------------------------------------------------
-# Background colors for terminal output formatting
-bdg="\e[42m"       # Background Color Dark Green
-bdb="\e[44m"       # Background Color Dark Blue
-bdm="\e[45m"       # Background Color Dark Magenta
-bdgy="\e[100m"     # Background Color Dark Gray
-blr="\e[101m"      # Background Color Light Red
-boff="\e[49m"      # Background Color Off
+# Background colors for terminal output formatting and styling
+bg_dark_green="\e[42m"       # Background Color Dark Green
+bg_dark_blue="\e[44m"        # Background Color Dark Blue
+bg_dark_magenta="\e[45m"     # Background Color Dark Magenta
+bg_dark_gray="\e[100m"       # Background Color Dark Gray
+bg_light_red="\e[101m"       # Background Color Light Red
+bg_off="\e[49m"              # Background Color Off
 
 #-----------------------------------------------------------------------------
 # CONTAINER LIFECYCLE MANAGEMENT FUNCTIONS
@@ -42,38 +42,42 @@ check_service_initialized() {
   print_debug "Checking to see if service has initialized"
   output_off
   
-  # Determine service name and initialization mode
+  # Determine initialization mode and service suffix
   if [ "$1" = "init" ]; then
-    service_suffix="-init"
-    service_bypass_mode=FALSE
+    init_suffix="-init"
+    auto_detect_mode=FALSE
   else
     service="$1"
-    service_bypass_mode=TRUE
+    auto_detect_mode=TRUE
   fi
 
-  # Auto-detect service name if not provided and not in bypass mode
-  if [ "$service_bypass_mode" = "FALSE" ] ; then
+  # Auto-detect service name when not explicitly provided
+  if [ "$auto_detect_mode" = "FALSE" ] ; then
     if [ -z "$2" ]; then
+      # Detect service name based on script execution context
       case "$(dirname "$0")" in
         "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+          # Cont-init script: use script filename as service name
           service=$(basename "$0")
         ;;
         *)
+          # Service script: use current directory name as service name
           service=$(basename "$PWD")
         ;;
       esac
     else
+      # Use explicitly provided service name
       service=$2
     fi
   fi
 
-  # Wait for service initialization marker file
-  while [ ! -f /tmp/.container/"${service}"${service_suffix} ]
+  # Wait for service initialization marker file to appear
+  while [ ! -f /tmp/.container/"${service}"${init_suffix} ]
   do
     sleep 1
-    print_debug "Looking for existence of /tmp/.container/${service}${service_suffix}"
+    print_debug "Looking for existence of /tmp/.container/${service}${init_suffix}"
   done
-  unset service_bypass_mode
+  unset auto_detect_mode
   output_on
 }
 
@@ -87,17 +91,19 @@ mark_service_initialized() {
     service_init_prefix="DONOTSTART "
   fi
   
-  # Create initialization marker based on script context
+  # Create initialization marker based on script execution context
   case "$(dirname "$0")" in
     "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
-      # Cont-init script: create init marker with timestamp
+      # Cont-init script context: create init marker with timestamp
       echo "${service_init_prefix} $(basename "$0")-init initialized on $(log_prefix)" >> /tmp/.container/"$(basename "$0")"-init
     ;;
     *)
-      # Service script: create or update service marker
+      # Service script context: create or update service marker
       if [ ! -f /tmp/.container/"$(basename "$PWD")" ]; then
+        # First time initialization
         echo "$(basename "$PWD") initialized on $(log_prefix)" >> /tmp/.container/"$(basename "$PWD")"
       else
+        # Service reinitialization (e.g., after configuration changes)
         echo "$(basename "$PWD") reinitialized on $(log_prefix)" >> /tmp/.container/"$(basename "$PWD")"
       fi
     ;;
@@ -108,40 +114,46 @@ mark_service_initialized() {
 # Prepare service by loading defaults and functions
 prepare_service() {
   if [ -n "$1" ] ; then
-    # Cont-init script context: load with automatic export
+    # Explicit loading mode: load specific resources based on argument
     case "$(dirname "$0")" in
       "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+        # Cont-init script context: load with automatic export (set -a)
         set -a
         get_defaults "$1"
         get_functions "$1"
         set +a
       ;;
       *)
-        # Service script context: load based on specified type
+        # Service script context: load based on specified resource type
         case "$1" in
           "BOTH" | "both" | "ALL" | "all" )
+            # Load both defaults and functions for comprehensive setup
             get_defaults "$2"
             get_functions "$2"
           ;;
           "DEFAULTS" | "defaults" )
+            # Load only configuration defaults
             get_defaults "$2"
           ;;
           "FUNCTIONS" | "functions" )
+            # Load only utility functions
             get_functions "$2"
           ;;
         esac
       ;;
     esac
   else
-    # No arguments provided: load based on script context
+    # Automatic loading mode: determine resources based on script context
     case "$(dirname "$0")" in
       "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d")
+        # Cont-init scripts: load everything with auto-export for initialization
         set -a
         get_defaults
         get_functions
         set +a
       ;;
       *)
+        # Service scripts: load only defaults by default
         get_defaults
       ;;
     esac
@@ -178,23 +190,29 @@ output_off() {
 }
 
 # Enable debug output (turn on set -x) with script-specific conditions
+# Enable debug output (turn on set -x) with script-specific conditions
 output_on() {
   if [ "${DEBUG_MODE,,}" = "true" ] ; then
     case "$(basename "$0")" in
       0*-* | 99-* )
+        # Skip debug output for initialization and cleanup scripts
         :
       ;;
       run )
+        # Handle service run scripts with additional context checking
         case "$PWD" in
           */0*-* | 99-* )
+            # Skip debug for run scripts in initialization/cleanup directories
             :
           ;;
           * )
+            # Enable debug for regular service run scripts
             set -x
           ;;
         esac
       ;;
       * )
+        # Enable debug for all other script types
         set -x
       ;;
     esac
@@ -210,13 +228,13 @@ print_debug() {
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[DEBUG] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdm}[DEBUG]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_magenta}[DEBUG]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         fi
       else
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[DEBUG] ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdm}[DEBUG]${boff} ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_magenta}[DEBUG]${bg_off} ** [${PROCESS_NAME}] $1"
         fi
       fi
     ;;
@@ -239,13 +257,13 @@ print_error() {
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[ERROR] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${blr}[ERROR]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_light_red}[ERROR]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         fi
       else
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[ERROR] ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${blr}[ERROR]${boff} ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_light_red}[ERROR]${bg_off} ** [${PROCESS_NAME}] $1"
         fi
       fi
     ;;
@@ -266,13 +284,13 @@ print_info() {
     if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
       echo -e "$(log_prefix)[INFO] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
     else
-      echo -e "$(log_prefix)${bdg}[INFO]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+      echo -e "$(log_prefix)${bg_dark_green}[INFO]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
     fi
   else
     if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
       echo -e "$(log_prefix)[INFO] ** [${PROCESS_NAME}] $1"
     else
-      echo -e "$(log_prefix)${bdg}[INFO]${boff} ** [${PROCESS_NAME}] $1"
+      echo -e "$(log_prefix)${bg_dark_green}[INFO]${bg_off} ** [${PROCESS_NAME}] $1"
     fi
   fi
 
@@ -289,13 +307,13 @@ print_notice() {
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[NOTICE] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdgy}[NOTICE]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_gray}[NOTICE]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         fi
       else
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[NOTICE] ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdgy}[NOTICE]${boff} ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_gray}[NOTICE]${bg_off} ** [${PROCESS_NAME}] $1"
         fi
       fi
     ;;
@@ -353,14 +371,14 @@ print_start() {
     if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
       echo -e "$(log_prefix)[STARTING] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
     else
-      echo -e "$(log_prefix)${bdg}[STARTING]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
+      echo -e "$(log_prefix)${bg_dark_green}[STARTING]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
     fi
     echo -e "$(log_prefix)[STARTING] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_counter_prefix}$1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
   else
     if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
       echo -e "$(log_prefix)[STARTING] ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
     else
-      echo -e "$(log_prefix)${bdg}[STARTING]${boff} ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
+      echo -e "$(log_prefix)${bg_dark_green}[STARTING]${bg_off} ** [${PROCESS_NAME}] ${process_counter_prefix}$1"
     fi
     echo -e "$(log_prefix)[STARTING] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_counter_prefix}$1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
   fi
@@ -376,13 +394,13 @@ print_warn() {
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[WARN] ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdb}[WARN]${boff} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_blue}[WARN]${bg_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
         fi
       else
         if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
           echo -e "$(log_prefix)[WARN] ** [${PROCESS_NAME}] $1"
         else
-          echo -e "$(log_prefix)${bdb}[WARN]${boff} ** [${PROCESS_NAME}] $1"
+          echo -e "$(log_prefix)${bg_dark_blue}[WARN]${bg_off} ** [${PROCESS_NAME}] $1"
         fi
       fi
   esac
@@ -397,7 +415,10 @@ print_warn() {
 
 # Execute commands silently unless debug mode or show output is enabled
 execute_silently() {
-  if [ "${DEBUG_MODE}" = "true" ] || [ "${SHOW_OUTPUT,,}" = "true" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] ;  then
+  # Normalize DEBUG_MODE to lowercase for case-insensitive comparison
+  local debug_mode_lower=$(echo "${DEBUG_MODE}" | tr '[:upper:]' '[:lower:]')
+  
+  if [ "${debug_mode_lower}" = "true" ] || [ "${SHOW_OUTPUT,,}" = "true" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] ;  then
     "$@"
   else
     "$@" > /dev/null 2>&1
@@ -487,7 +508,7 @@ clone_git_repo() {
     echo "[clone_git_repo] You tried to call the function but there's no arguments"
     exit 1
   fi
-  set -x
+  if [ ${DEBUG_MODE,,} = "true" ] ; then set -x ; fi
 }
 
 #-----------------------------------------------------------------------------
@@ -600,6 +621,10 @@ install_template() {
     mkdir -p "$(dirname "$3")"
   fi
 
+  # Copy template file to destination
+  cp "$2" "$3"
+  
+  # Set proper permissions and ownership after copying
   chmod "${template_mode}" "${3}"
   chown "${1}" "${3}"
 }
@@ -891,7 +916,7 @@ get_image_version() {
       image_version=$(head -n1 /assets/.changelogs/docker-${IMAGE_NAME/\//_}.md | awk '{print $2}')
     else
       if [ -f /assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md ] ; then
-        image_version=$(head -n1 /assets/.changelogs/docker-${IMAGE_NAME/\//_}.md | awk '{print $2}')
+        image_version=$(head -n1 /assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md | awk '{print $2}')
       else
         strip_image_repo_url=$(echo ${IMAGE_REPO_URL%/} | sed "s#https://github.com/##g")
         if [ -f /assets/.changelogs/${strip_image_repo_url/\//_}.md ] ; then
@@ -916,14 +941,17 @@ get_image_version() {
 #-----------------------------------------------------------------------------
 # Add host overrides to /etc/hosts from CONTAINER_HOST_OVERRIDE_* variables
 host_override() {
-  # Count total number of host override variables
-  host_override_count=$(printenv | sort | grep -cE '^CONTAINER_HOST_OVERRIDE_([0-9].)')
-  
-  # Process each host override variable
-  for (( host_index = 01; host_index <= host_override_count; host_index++ )) ; do
-    host_index=$(printf "%02d" $host_index)
-    host_override_var=CONTAINER_HOST_OVERRIDE_${host_index}
-    host_ip=$(echo ${!host_override_var} | awk '{print $1}')
+  # Get all host override variables and process them directly
+  printenv | sort | grep -E '^CONTAINER_HOST_OVERRIDE_([0-9].)' | while IFS='=' read -r var_name var_value; do
+    # Extract the index from the variable name
+    host_index=$(echo "$var_name" | sed 's/^CONTAINER_HOST_OVERRIDE_//')
+    
+    # Skip if no value or empty
+    if [ -z "$var_value" ]; then
+      continue
+    fi
+    
+    host_ip=$(echo "$var_value" | awk '{print $1}')
 
     # Resolve hostname to IP if not already an IP address
     if [[ ! "${host_ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
@@ -931,8 +959,8 @@ host_override() {
     fi
 
     # Add host entry to /etc/hosts
-    echo "# Added automatically by CONTAINER_HOST_OVERRIDE_${host_index}" >> /etc/hosts
-    echo "${host_ip} $(echo ${!host_override_var} | cut -d' ' -f2-)" >> /etc/hosts
+    echo "# Added automatically by $var_name" >> /etc/hosts
+    echo "${host_ip} $(echo "$var_value" | cut -d' ' -f2-)" >> /etc/hosts
   done
 }
 
@@ -1198,9 +1226,9 @@ EOF
       maria_port=${maria_port:-3306}
       transform_file_var DB_HOST
       if [ -n "${DB_HOST}" ] ; then maria_host=${DB_HOST} ; fi ;
-      transform_file_var MYSQL_PORT
+      transform_file_var MYSQL_HOST
       if [ -n "${MYSQL_HOST}" ] ; then maria_host=${MYSQL_HOST} ; fi ;
-      transform_file_var MARIA_PORT
+      transform_file_var MARIA_HOST
       if [ -n "${MARIA_HOST}" ] ; then maria_host=${MARIA_HOST} ; fi ;
       transform_file_var DB_USER
       if [ -n "${DB_USER}" ] ; then maria_user=${DB_USER} ; fi ;
@@ -1234,23 +1262,42 @@ EOF
         print_error "No Postgresql client installation installation detected - Cannot check for Database"
         exit 1
       fi
+      # Handle port configuration with priority: *_FILE > environment variable > default
+      if [ -n "${DB_PORT_FILE}" ] ; then postgres_port="$(cat "${DB_PORT_FILE}")" ; fi ;
+      if [ -n "${POSTGRES_PORT_FILE}" ] ; then postgres_port="$(cat "${POSTGRES_PORT_FILE}")" ; fi ;
       transform_file_var DB_PORT
       if [ -n "${DB_PORT}" ] ; then postgres_port=${DB_PORT} ; fi ;
-      transform_file_var POSTGRES_HOST
+      transform_file_var POSTGRES_PORT
       if [ -n "${POSTGRES_PORT}" ] ; then postgres_port=${POSTGRES_PORT} ; fi ;
       postgres_port=${postgres_port:-5432}
+      
+      # Handle host configuration with priority: *_FILE > environment variable
+      if [ -n "${DB_HOST_FILE}" ] ; then postgres_host="$(cat "${DB_HOST_FILE}")" ; fi ;
+      if [ -n "${POSTGRES_HOST_FILE}" ] ; then postgres_host="$(cat "${POSTGRES_HOST_FILE}")" ; fi ;
       transform_file_var DB_HOST
       if [ -n "${DB_HOST}" ] ; then postgres_host=${DB_HOST} ; fi ;
       transform_file_var POSTGRES_HOST
       if [ -n "${POSTGRES_HOST}" ] ; then postgres_host=${POSTGRES_HOST} ; fi ;
+      
+      # Handle user configuration with priority: *_FILE > environment variable
+      if [ -n "${DB_USER_FILE}" ] ; then postgres_user="$(cat "${DB_USER_FILE}")" ; fi ;
+      if [ -n "${POSTGRES_USER_FILE}" ] ; then postgres_user="$(cat "${POSTGRES_USER_FILE}")" ; fi ;
       transform_file_var DB_USER
       if [ -n "${DB_USER}" ] ; then postgres_user=${DB_USER} ; fi ;
       transform_file_var POSTGRES_USER
       if [ -n "${POSTGRES_USER}" ] ; then postgres_user=${POSTGRES_USER} ; fi ;
+      
+      # Handle password configuration with priority: *_FILE > environment variable
+      if [ -n "${DB_PASS_FILE}" ] ; then postgres_pass="$(cat "${DB_PASS_FILE}")" ; fi ;
+      if [ -n "${PGPASSWORD_FILE}" ] ; then postgres_pass="$(cat "${PGPASSWORD_FILE}")" ; fi ;
       transform_file_var DB_PASS
       if [ -n "${DB_PASS}" ] ; then postgres_pass=${DB_PASS} ; fi ;
       transform_file_var PGPASSWORD
       if [ -n "${PGPASSWORD}" ] ; then postgres_pass=${PGPASSWORD} ; fi ;
+      
+      # Handle database name configuration with priority: *_FILE > environment variable
+      if [ -n "${DB_NAME_FILE}" ] ; then postgres_name="$(cat "${DB_NAME_FILE}")" ; fi ;
+      if [ -n "${POSTGRES_NAME_FILE}" ] ; then postgres_name="$(cat "${POSTGRES_NAME_FILE}")" ; fi ;
       transform_file_var DB_NAME
       if [ -n "${DB_NAME}" ] ; then postgres_name=${DB_NAME} ; fi ;
       transform_file_var POSTGRES_NAME
@@ -1333,10 +1380,10 @@ sanity_db() {
       ;;
       "influx" | "influxdb")
         print_debug "Checking Influx DB Parameters"
-        if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
         transform_file_var DB_HOST
-        if [ -n "${INFLUX_HOST}" ] ; then influx_host=${INFLUX_HOST} ; fi ;
+        if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
         transform_file_var INFLUX_HOST
+        if [ -n "${INFLUX_HOST}" ] ; then influx_host=${INFLUX_HOST} ; fi ;
         if [ -z "${influx_host}" ] ; then
           print_error "No Influx Database Host Entered! - Set '\$DB_HOST' or '\$INFLUX_HOST'"
           exit 1
@@ -1344,10 +1391,10 @@ sanity_db() {
       ;;
       "mongo" | "mongodb" )
         print_debug "Checking Mongo DB Parameters"
-        if [ -n "${DB_HOST}" ] ; then mongo_host=${DB_HOST} ; fi ;
         transform_file_var DB_HOST
-        if [ -n "${MONGO_HOST}" ] ; then mongo_host=${MONGO_HOST} ; fi ;
+        if [ -n "${DB_HOST}" ] ; then mongo_host=${DB_HOST} ; fi ;
         transform_file_var MONGO_HOST
+        if [ -n "${MONGO_HOST}" ] ; then mongo_host=${MONGO_HOST} ; fi ;
         if [ -z "${mongo_host}" ] ; then
           print_error "No Mongo Database Host Entered! - Set '\$DB_HOST' or '\$MONGO_HOST'"
           exit 1
@@ -1508,8 +1555,8 @@ grant_doas() {
     
     # Configure doas command restriction if specified
     if [ -n "$2" ] ; then
-      print_debug="Adding doas privileges to '$1' for '${doas_command}' command"
       doas_command="cmd $2"
+      print_debug "Adding doas privileges to '$1' for '${doas_command}' command"
     else
       doas_command=""
     fi
@@ -1646,20 +1693,20 @@ package() {
   distro=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
   local action="${1}"
   shift
-  local arguments=$@
+  local arguments=("$@")
 
   # Map common action names to internal functions
   case "${action}" in
     add | install )
       action=install
-      "${action}" "${arguments}"
+      "${action}" "${arguments[@]}"
     ;;
     delete | remove | uninstall )
       action=remove
-      "${action}" "${arguments}"
+      "${action}" "${arguments[@]}"
     ;;
     * )
-      "${action}" "${arguments}"
+      "${action}" "${arguments[@]}"
     ;;
   esac
   output_on
