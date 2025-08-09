@@ -1628,9 +1628,9 @@ grant_doas() {
     fi
 
     # Add doas configuration entry
-    echo "permit nopass $1 ${doas_command} as root" >> /etc/doas.conf
+    echo "permit nopass $1 as root ${doas_command}" >> /etc/doas.conf
     chown root:root /etc/doas.conf
-    chmod 0400 -R /etc/doas.conf
+    chmod -R 0400 /etc/doas.conf
   fi
   output_on
 }
