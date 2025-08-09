@@ -122,6 +122,10 @@ mark_service_initialized() {
       fi
     ;;
   esac
+  
+  # Clear service_init_prefix to prevent stale values in subsequent calls
+  unset service_init_prefix
+  
   output_on
 }
 
@@ -533,6 +537,10 @@ create_logrotate() {
     if [ ! -f /assets/logrotate/"$1" ] ; then
       print_debug "Creating Logrotate Entry for $2"
       
+      # Initialize local variables to prevent persistence from previous calls
+      local logship_config=""
+      local logrotate_user_config=""
+      
       # Configure logship integration if specified
       if [ -n "$3" ] ; then
         if [ "${3,,}" != "none" ] ; then
@@ -568,6 +576,8 @@ EOF
 
 # Copy custom files from source to destination with optional ownership
 custom_files() {
+  local custom_files_source custom_files_destination permission_builder
+  
   if [ -n "${2}" ] ; then
     custom_files_source="${1}"
     custom_files_destination="${2}"
