@@ -1,0 +1,104 @@
+#-----------------------------------------------------------------------------
+# Git Ignore Configuration
+#
+# Purpose: Defines files and directories that should be excluded from
+# version control. Organized by category for easy maintenance and
+# understanding of what gets ignored and why.
+#
+# Note: Patterns are checked in order. More specific patterns should
+# come after general ones. Use comments to explain non-obvious patterns.
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# OPERATING SYSTEM FILES
+#-----------------------------------------------------------------------------
+# macOS system and metadata files
+.DS_Store
+.apdisk
+._*
+.AppleDB
+.AppleDesktop
+.AppleDouble
+.com.apple.timemachine.donotpresent
+.DocumentRevisions-V100
+.fseventsd
+.LSOverride
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+Icon
+Network Trash Folder
+Temporary Items
+
+#-----------------------------------------------------------------------------
+# DEVELOPMENT ENVIRONMENT FILES
+#-----------------------------------------------------------------------------
+# JetBrains IDEs (IntelliJ IDEA, WebStorm, PyCharm, etc.)
+.idea/
+.idea_modules/
+.idea/$CACHE_FILE$
+.idea/**/aws.xml
+.idea/**/azureSettings.xml
+.idea/**/codestream.xml
+.idea/**/contentModel.xml
+.idea/**/dbnavigator.xml
+.idea/**/dictionaries
+.idea/**/dynamic.xml
+.idea/**/gradle.xml
+.idea/**/httpRequests
+.idea/**/libraries
+.idea/**/markdown-navigator/
+.idea/**/mongoSettings.xml
+.idea/**/shelf
+.idea/**/sonarIssues.xml
+.idea/**/sonarlint/
+.idea/**/sqlDataSources.xml
+.idea/**/tasks.xml
+.idea/**/uiDesigner.xml
+.idea/**/usage.statistics.xml
+.idea/**/workspace.xml
+.idea/caches/build_file_checksums.ser
+.idea/misc.xml
+.idea/replstate.xml
+modules.xml
+
+# IntelliJ project files
+*.iml
+*.ipr
+
+#-----------------------------------------------------------------------------
+# THIRD-PARTY PLUGIN FILES
+#-----------------------------------------------------------------------------
+# External development tools and plugins
+atlassian-ide-plugin.xml
+com_crashlytics_export_strings.xml
+crashlytics-build.properties
+crashlytics.properties
+fabric.properties
+
+#-----------------------------------------------------------------------------
+# SECURITY AND CONFIGURATION
+#-----------------------------------------------------------------------------
+# Sensitive configuration and security files
+.env
+.well-known/
+
+#-----------------------------------------------------------------------------
+# LOGS AND TEMPORARY FILES
+#-----------------------------------------------------------------------------
+# Application and system logs
+*.log
+*.tmp
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+#-----------------------------------------------------------------------------
+# CONTAINER AND ORCHESTRATION
+#-----------------------------------------------------------------------------
+# Docker and Kubernetes configuration
+.kube/
