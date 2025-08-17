@@ -1,0 +1,10 @@
+Fluent-bit Parsers Directory - Intentionally Empty
+
+Purpose: Directory placeholder for custom fluent-bit log parser configurations
+
+Usage: Add .conf files with parser definitions for custom log formats
+Example: JSON, regex, multiline parsers for application logs
+
+Replace this file with your parser configurations following fluent-bit syntax.
+
+https://www.focela.com
