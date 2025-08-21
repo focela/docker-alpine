@@ -1,0 +1,18 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Scheduling Configuration Variables
+#
+# Purpose: Defines default environment variables for scheduling and cron configuration
+# Context: Loaded during container initialization to configure task scheduling
+# Note: Scheduling-related settings with fallback defaults for cron logging
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SCHEDULING LOGGING CONFIGURATION
+#-----------------------------------------------------------------------------
+# Cron job logging settings and output configuration
+SCHEDULING_LOG_TYPE=${SCHEDULING_LOG_TYPE:-"FILE"}
+SCHEDULING_LOG_LOCATION=${SCHEDULING_LOG_LOCATION:-"/var/log/cron/"}
+SCHEDULING_LOG_LEVEL=${SCHEDULING_LOG_LEVEL:-"8"}
