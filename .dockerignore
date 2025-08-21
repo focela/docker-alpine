@@ -1,0 +1,261 @@
+#------------------------------------------------------------------------
+# DOCKERIGNORE FILE
+#
+# Purpose: Specifies files and directories to exclude from Docker build context
+# Benefits:
+# - Reduces build context size for faster builds (up to 90% reduction)
+# - Prevents unnecessary cache invalidation
+# - Improves security by excluding sensitive files
+# - Accelerates image transfers and deployments
+#------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# VERSION CONTROL & REPOSITORY METADATA
+#-----------------------------------------------------------------------------
+# Git and other VCS directories and files
+.git*
+.hg*
+.svn*
+
+# Repository metadata and configuration
+CHANGELOG*
+CONTRIBUTING*
+HISTORY*
+LICENSE*
+README*
+
+#-----------------------------------------------------------------------------
+# DEVELOPMENT ENVIRONMENTS & EDITORS
+#-----------------------------------------------------------------------------
+# IDE and editor configurations
+.idea/
+.vscode/
+.vim/
+.emacs.d/
+*.sublime-*
+
+# Editor temporary and backup files
+*~
+*.swp
+*.swo
+*.swn
+.#*
+\#*#
+
+#-----------------------------------------------------------------------------
+# OPERATING SYSTEM ARTIFACTS
+#-----------------------------------------------------------------------------
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+.Trash-*
+.nfs*
+
+#-----------------------------------------------------------------------------
+# DOCUMENTATION & NON-RUNTIME FILES
+#-----------------------------------------------------------------------------
+# Documentation directories
+docs/
+documentation/
+*.md
+!**/README.md
+
+# Project metadata
+AUTHORS*
+CONTRIBUTORS*
+MAINTAINERS*
+
+#-----------------------------------------------------------------------------
+# DEVELOPMENT, TESTING & BUILD ARTIFACTS
+#-----------------------------------------------------------------------------
+# Common development directories
+.cache/
+.temp/
+.tmp/
+build/
+dist/
+out/
+target/
+
+# Testing directories and files
+test/
+tests/
+__tests__/
+spec/
+.nyc_output/
+coverage/
+*.test.*
+*.spec.*
+
+# Example and demo directories
+example/
+examples/
+demo/
+demos/
+sample/
+samples/
+
+#-----------------------------------------------------------------------------
+# DEPENDENCY MANAGEMENT & PACKAGE MANAGERS
+#-----------------------------------------------------------------------------
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.yarn/
+package-lock.json
+yarn.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+.venv/
+venv/
+env/
+
+# Go
+vendor/
+go.sum
+
+# Java/Maven/Gradle
+.m2/
+.gradle/
+build.gradle
+pom.xml
+
+#-----------------------------------------------------------------------------
+# ENVIRONMENT & CONFIGURATION
+#-----------------------------------------------------------------------------
+# Environment files (security sensitive)
+.env*
+!.env.example
+!.env.template
+
+# Local configuration
+*.local
+.config/
+config/local.*
+
+# Docker development files
+Dockerfile*
+!Dockerfile
+docker-compose*.yml
+docker-compose*.yaml
+compose*.yml
+compose*.yaml
+
+# Build and deployment configurations
+Makefile*
+makefile*
+.make/
+Vagrantfile
+.vagrant/
+
+#-----------------------------------------------------------------------------
+# MONITORING & TEMPLATES (PROJECT-SPECIFIC)
+#-----------------------------------------------------------------------------
+# Zabbix templates and monitoring configs
+zabbix_templates/
+monitoring/
+templates/
+
+#-----------------------------------------------------------------------------
+# LOGS & RUNTIME FILES
+#-----------------------------------------------------------------------------
+# Log files
+*.log
+logs/
+log/
+
+# Runtime and process files
+*.pid
+*.seed
+*.pid.lock
+
+# Temporary directories and files
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+*.orig
+
+#-----------------------------------------------------------------------------
+# SECURITY & CERTIFICATES
+#-----------------------------------------------------------------------------
+# Certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Security scanning results
+.snyk
+
+#-----------------------------------------------------------------------------
+# CLOUD & DEPLOYMENT
+#-----------------------------------------------------------------------------
+# Terraform
+*.tfstate*
+*.tfvars
+.terraform/
+
+# Kubernetes
+*.kubeconfig
+k8s/
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+.circleci/
+Jenkinsfile
+
+#-----------------------------------------------------------------------------
+# DEVELOPMENT DATABASES & CACHES
+#-----------------------------------------------------------------------------
+# Local databases
+*.sqlite
+*.sqlite3
+*.db
+
+# Framework-specific cache directories
+.parcel-cache/
+.next/
+.nuxt/
+
+#-----------------------------------------------------------------------------
+# BACKUP FILES (PROJECT-SPECIFIC PATTERNS)
+#-----------------------------------------------------------------------------
+# Installation and configuration backups
+!install/
+!install/**
+install/assets/**/*.bak
+install/assets/**/*.tmp
+install/etc/**/*.bak
+install/etc/**/*.tmp
+
+# Generic backup patterns
+**/*.backup
+**/*.old
+**/*.orig
