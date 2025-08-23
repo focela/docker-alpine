@@ -1,0 +1,124 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Zabbix Agent Configuration Variables
+#
+# Purpose: Defines default environment variables for Zabbix agent configuration
+# Context: Loaded during container initialization to configure monitoring agent
+# Note: Zabbix agent settings with OS-specific fallback defaults
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# ZABBIX AGENT BASIC CONFIGURATION
+#-----------------------------------------------------------------------------
+# Agent identification and connection settings
+ZABBIX_HOSTNAME=${ZABBIX_HOSTNAME:-"${CONTAINER_NAME}"}
+ZABBIX_SERVER=${ZABBIX_SERVER:-"127.0.0.1"}
+ZABBIX_SERVER_ACTIVE=${ZABBIX_SERVER_ACTIVE:-"zabbix-proxy"}
+ZABBIX_SETUP_TYPE=${ZABBIX_SETUP_TYPE:-"AUTO"}
+
+# Network and listening configuration
+ZABBIX_LISTEN_IP=${ZABBIX_LISTEN_IP:-"127.0.0.1"}
+ZABBIX_LISTEN_PORT=${ZABBIX_LISTEN_PORT:-"10050"}
+ZABBIX_STATUS_PORT=${ZABBIX_STATUS_PORT:-"8050"}
+
+# Agent process and user settings
+ZABBIX_START_AGENTS=${ZABBIX_START_AGENTS:-"1"}
+ZABBIX_USER=${ZABBIX_USER:-"zabbix"}
+ZABBIX_ALLOW_ROOT=${ZABBIX_ALLOW_ROOT:-"0"}
+
+#-----------------------------------------------------------------------------
+# ZABBIX AGENT PATHS AND FILES
+#-----------------------------------------------------------------------------
+# Configuration and certificate paths
+ZABBIX_CONFIG_PATH=${ZABBIX_CONFIG_PATH:-"/etc/zabbix/"}
+ZABBIX_CONFIG_FILE=${ZABBIX_CONFIG_FILE:-"zabbix_agentd.conf"}
+ZABBIX_CERT_PATH=${ZABBIX_CERT_PATH:-"/etc/zabbix/certs/"}
+
+# Logging and runtime paths
+ZABBIX_AGENT_LOG_PATH=${ZABBIX_AGENT_LOG_PATH:-"/var/log/zabbix/agent/"}
+ZABBIX_AGENT_LOG_FILE=${ZABBIX_AGENT_LOG_FILE:-"zabbix_agentd.log"}
+ZABBIX_LOG_FILE_SIZE=${ZABBIX_LOG_FILE_SIZE:-"0"}
+ZABBIX_PID=${ZABBIX_PID:-"/var/lib/zabbix/run/zabbix-agent.pid"}
+ZABBIX_SOCKET=${ZABBIX_SOCKET:-"/var/lib/zabbix/run/zabbix-agent.sock"}
+
+#-----------------------------------------------------------------------------
+# ZABBIX AGENT PERFORMANCE SETTINGS
+#-----------------------------------------------------------------------------
+# Buffer and timeout configuration
+ZABBIX_BUFFER_SIZE=${ZABBIX_BUFFER_SIZE:-"100"}
+ZABBIX_BUFFER_SEND=${ZABBIX_BUFFER_SEND:-"5"}
+ZABBIX_AGENT_TIMEOUT=${ZABBIX_AGENT_TIMEOUT:-"3"}
+ZABBIX_MAXLINES_SECOND=${ZABBIX_MAXLINES_SECOND:-"20"}
+
+# Active checks and refresh settings
+ZABBIX_REFRESH_ACTIVE_CHECKS=${ZABBIX_REFRESH_ACTIVE_CHECKS:-"120"}
+
+#-----------------------------------------------------------------------------
+# ZABBIX AGENT SECURITY AND DEBUGGING
+#-----------------------------------------------------------------------------
+# Debug and logging levels
+ZABBIX_DEBUGLEVEL=${ZABBIX_DEBUGLEVEL:-"1"}
+
+# Remote commands configuration
+ZABBIX_REMOTECOMMANDS_ALLOW=${ZABBIX_REMOTECOMMANDS_ALLOW:-""}
+ZABBIX_REMOTECOMMANDS_LOG=${ZABBIX_REMOTECOMMANDS_LOG:-"1"}
+
+# User privileges and sudo settings
+ZABBIX_USER_DOAS=${ZABBIX_USER_DOAS:-"FALSE"}
+ZABBIX_USER_SUDO=${ZABBIX_USER_SUDO:-"FALSE"}
+
+#-----------------------------------------------------------------------------
+# ZABBIX AGENT AUTO-REGISTRATION
+#-----------------------------------------------------------------------------
+# Auto-registration settings for dynamic agent discovery
+ZABBIX_ENABLE_AUTOREGISTER=${ZABBIX_ENABLE_AUTOREGISTER:-"TRUE"}
+ZABBIX_ENABLE_AUTOREGISTER_DNS=${ZABBIX_ENABLE_AUTOREGISTER_DNS:-"TRUE"}
+
+#-----------------------------------------------------------------------------
+# OS-SPECIFIC AGENT TYPE DETECTION
+#-----------------------------------------------------------------------------
+# Automatically detect agent type based on OS for compatibility
+if [ -z "${ZABBIX_AGENT_TYPE}" ]; then
+  ZABBIX_AGENT_TYPE="classic"
+  
+  if [ -f /etc/os-release ]; then
+    # Extract OS identifier and sanitize for case matching
+    detected_os_id=$(grep "^ID=" /etc/os-release | cut -d = -f2 | tr -d '"')
+    
+    case ${detected_os_id} in
+    "alpine" )
+      # Alpine version detection to choose agent type
+      alpine_version_id=$(grep "VERSION_ID=" /etc/os-release | cut -d = -f2 | tr -d '"')
+      
+      if [ "$alpine_version_id" = "edge" ]; then
+        # Edge releases use modern agent for latest features
+        ZABBIX_AGENT_TYPE="modern"
+      else
+        # Parse version numbers for comparison
+        alpine_major_version=$(echo "$alpine_version_id" | cut -d . -f1 | sed 's/[^0-9].*//')
+        alpine_minor_version=$(echo "$alpine_version_id" | cut -d . -f2 | sed 's/[^0-9].*//')
+        
+        # Alpine 3.15+ or 4.0+ supports modern agent
+        if [ -n "$alpine_major_version" ] && [ -n "$alpine_minor_version" ]; then
+          if [ "$alpine_major_version" -ge 4 ] || ([ "$alpine_major_version" -eq 3 ] && [ "$alpine_minor_version" -ge 15 ]); then
+            # Modern agent provides enhanced features
+            ZABBIX_AGENT_TYPE="modern"
+          else
+            # Older versions use classic agent for compatibility
+            ZABBIX_AGENT_TYPE="classic"
+          fi
+        else
+          # Fallback to classic if parsing fails
+          ZABBIX_AGENT_TYPE="classic"
+        fi
+      fi
+    ;;
+    "debian" | "ubuntu" )
+      # Debian/Ubuntu use modern agent for full features
+      ZABBIX_AGENT_TYPE="modern"
+      ;;
+    esac
+  fi
+fi
