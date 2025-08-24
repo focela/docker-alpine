@@ -124,7 +124,7 @@ if var_true "${CONTAINER_ENABLE_PERMISSIONS}" ; then
     # Add users to group if group exists
     if [ "${_groupexists}" = true ] ; then
       uta=$(echo "${gapair}" | cut -d = -f2 | tr ',' '\n')
-      for userstogroup in "${uta}" ; do
+      for userstogroup in $uta ; do
         print_debug "Adding user '${userstogroup}' to '${gname}'"
         
         # Detect OS and use appropriate group management command
