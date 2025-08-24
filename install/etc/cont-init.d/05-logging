@@ -102,7 +102,7 @@ else
       # OS COMPATIBILITY CHECK
       #-----------------------------------------------------------------------------
       # Check operating system compatibility for Fluent Bit
-      os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
+      os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2 | tr -d '"')
       case ${os,,} in
         "alpine" )
           archit="$(apk --print-arch)"
@@ -271,7 +271,7 @@ EOF
 EOF
                 if [ -f "/assets/logrotate/${logship_title,,}" ] ; then
                   print_debug "[logship] Setting Logrotate value to skip for /assets/logrotate/${logship_title,,}"
-                  sed -i "# logship: .*|# logship: ignore"
+                  sed -i "s|# logship: .*|# logship: ignore|g" "/assets/logrotate/${logship_title,,}"
                 fi
               else
                 print_debug "[logship] Adding ${logship_title} with to be parsed by ${CONTAINER_LOGSHIPPING_BACKEND}"

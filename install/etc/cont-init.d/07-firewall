@@ -230,7 +230,7 @@ EOF
     # FAIL2BAN JAIL.D CONFIGURATION PROCESSING
     #-----------------------------------------------------------------------------
     # Process and substitute environment variables in jail.d configuration files
-    if [ -d "${FAIL2BAN_CONFIG_PATH}"/jail.d ] && dir_notempty ; then
+    if [ -d "${FAIL2BAN_CONFIG_PATH}"/jail.d ] && dir_notempty "${FAIL2BAN_CONFIG_PATH}/jail.d" ; then
       for fail2ban_file in "${FAIL2BAN_CONFIG_PATH}"/jail.d/*.conf ; do
         if [ ! -d "$fail2ban_file" ] ; then
           print_debug "Substituting Environment Variables for: '${fail2ban_file}'"

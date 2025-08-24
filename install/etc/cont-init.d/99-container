@@ -34,10 +34,12 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   
   # Extract names of initialization scripts
   declare -a files_init_name
-  declare -a length_of_files_init_name
   for f in /etc/cont-init.d/*; do
-    files_init_name[length_of_files_init_name + 1]=filename
-    files_init_name[${#files_init_name[@]}+1]=$(echo "$f" | sed "s#filename##g" | sed "s#/etc/cont-init.d/##g" | sed "s#99-container##g" );
+    # Extract script name without path and exclude 99-container
+    script_name=$(basename "$f")
+    if [ "$script_name" != "99-container" ]; then
+      files_init_name+=("$script_name")
+    fi
   done
 
   #-----------------------------------------------------------------------------
@@ -48,10 +50,10 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   
   # Extract names of completed initialization scripts
   declare -a init_complete_name
-  declare -a length_of_init_complete_name
   for f in /tmp/.container/*-init; do
-    init_complete_name[length_of_init_complete_name + 1]=filename
-    init_complete_name[${#init_complete_name[@]}+1]=$(echo "$f" | sed "s#filename##g" | sed "s#/tmp/.container/##g" | sed "s#-init##g");
+    # Extract script name without path and -init suffix
+    script_name=$(basename "$f" | sed 's/-init$//')
+    init_complete_name+=("$script_name")
   done
 
   #-----------------------------------------------------------------------------

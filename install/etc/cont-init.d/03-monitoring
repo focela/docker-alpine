@@ -45,7 +45,7 @@ if var_true "${CONTAINER_ENABLE_MONITORING}" ; then
       # ZABBIX AGENT BASIC CONFIGURATION
       #-----------------------------------------------------------------------------
       # Detect operating system for OS-specific configurations
-      os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2)
+      os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2 | tr -d '"')
       
       # Enable debug logging if DEBUG_MODE is set
       if var_true "${DEBUG_MODE}" ; then
