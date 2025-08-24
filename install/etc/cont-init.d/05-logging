@@ -109,7 +109,7 @@ else
           case "$archit" in
             x86_64)
               osver=$(cat /etc/os-release | grep VERSION_ID | cut -d = -f 2 | cut -d . -f 2 | cut -d _ -f 1)
-              if [ "${osver}" -ge 11 ] || [ "$osver" = "edge" ] || [[ "$osver" = 17* ]]; then
+              if [ "$osver" = "edge" ] || [[ "$osver" = 17* ]] || { [ -n "$osver" ] && [ "$osver" -ge 11 ]; }; then
                 :
               else
                 print_error "Sorry this functionality is not available on < Alpine 3.11 releases"

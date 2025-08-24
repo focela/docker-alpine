@@ -134,7 +134,7 @@ else
   if [ -f /assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md ] ; then
     changelogname="/assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md"
   else
-    strip_image_repo_url=$(echo ${IMAGE_REPO_URL%/} | sed "s#https://github.com/##g")
+    strip_image_repo_url=$(echo "${IMAGE_REPO_URL%/}" | sed "s#https://github.com/##g")
     if [ -f /assets/.changelogs/${strip_image_repo_url/\//_}.md ] ; then
       changelogname="/assets/.changelogs/${strip_image_repo_url/\//_}.md"
     fi

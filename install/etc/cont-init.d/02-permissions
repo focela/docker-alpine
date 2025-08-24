@@ -123,18 +123,18 @@ if var_true "${CONTAINER_ENABLE_PERMISSIONS}" ; then
 
     # Add users to group if group exists
     if [ "${_groupexists}" = true ] ; then
-      uta=$(echo ${gapair} | cut -d = -f2 | tr ',' '\n')
-      for userstogroup in ${uta} ; do
+      uta=$(echo "${gapair}" | cut -d = -f2 | tr ',' '\n')
+      for userstogroup in "${uta}" ; do
         print_debug "Adding user '${userstogroup}' to '${gname}'"
         
         # Detect OS and use appropriate group management command
         os=$(cat /etc/os-release |grep ^ID= | cut -d = -f2 | tr -d '"')
-        case ${os,,} in
+        case "${os,,}" in
           "alpine" )
-            silent addgroup ${userstogroup} ${gname}
+            silent addgroup "${userstogroup}" "${gname}"
           ;;
           "debian" | "ubuntu" )
-            silent usermod -a -G ${gname} ${userstogroup}
+            silent usermod -a -G "${gname}" "${userstogroup}"
           ;;
         esac
       done

@@ -26,6 +26,12 @@ PROCESS_NAME="firewall"
 # Detect and validate firewall backend command
 firewall_command=$(which "${CONTAINER_FIREWALL_BACKEND,,}")
 
+# Validate firewall command exists
+if [ -z "${firewall_command}" ] || [ ! -x "${firewall_command}" ]; then
+  print_error "Firewall backend '${CONTAINER_FIREWALL_BACKEND}' not found or not executable"
+  exit 1
+fi
+
 #-----------------------------------------------------------------------------
 # FIREWALL FEATURE ENABLEMENT
 #-----------------------------------------------------------------------------
@@ -70,7 +76,7 @@ if var_true "${CONTAINER_ENABLE_FIREWALL}" ; then
       rule_number="$(echo "${firewall_entry}" | cut -d = -f1 )"
       rule_value="$(echo "${firewall_entry}" | cut -d = -f2 )"
       print_debug "Adding Rule Number: ${rule_number} with to be parsed by ${CONTAINER_FIREWALL_BACKEND}"
-      silent "${firewall_command}" ${rule_value}
+      silent "${firewall_command}" "${rule_value}"
     done < "${firewallenv}"
     
     # Clean up temporary files and variables
