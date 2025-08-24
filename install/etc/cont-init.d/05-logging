@@ -122,7 +122,7 @@ else
               print_error "Sorry this functionality is not available on ${archit} architecture"
               service_stop "$(basename "$0")"
               liftoff
-              exit
+              exit 1
             ;;
           esac
         ;;
@@ -136,7 +136,7 @@ else
               print_error "Sorry this functionality is not available on ${archit} architecture"
               service_stop "$(basename "$0")"
               liftoff
-              exit
+              exit 1
             ;;
           esac
         ;;

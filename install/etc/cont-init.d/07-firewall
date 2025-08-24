@@ -101,7 +101,6 @@ if var_true "${CONTAINER_ENABLE_FIREWALL}" ; then
     # Configure fail2ban filesystem and persistent storage
     print_debug "Fail2ban: Configuring Filesystem"
     if [ "${FAIL2BAN_CONFIG_PATH}" != "/etc/fail2ban/" ]; then
-      echo "not /etc/fail2ban"
       print_debug "Fail2ban: Creating Config Dir"
       mkdir -p "${FAIL2BAN_CONFIG_PATH}"
       silent cp -R /etc/fail2ban/* "${FAIL2BAN_CONFIG_PATH}"
