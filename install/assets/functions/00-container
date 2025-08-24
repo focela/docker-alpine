@@ -1,0 +1,1717 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Core Functions and Utilities Library
+#
+# Purpose: Shared functions for lifecycle, logging, templates, monitoring, packages, 
+#          wait operations, system configuration, database connectivity, and utilities
+# Context: Sourced by s6-overlay init/runtime after with-contenv loads environment
+# Note: Keep contracts stable; review dependent scripts before changes
+#-----------------------------------------------------------------------------
+
+
+
+# Source container defaults for base configuration
+source /assets/defaults/00-container
+
+#-----------------------------------------------------------------------------
+# TERMINAL COLOR DEFINITIONS
+#-----------------------------------------------------------------------------
+# Terminal color codes for output formatting and styling
+background_color_dark_green="\e[42m"
+background_color_dark_blue="\e[44m"
+background_color_dark_magenta="\e[45m"
+background_color_dark_gray="\e[100m"
+background_color_light_red="\e[101m"
+background_color_off="\e[49m"
+
+#-----------------------------------------------------------------------------
+# CONTAINER LIFECYCLE MANAGEMENT FUNCTIONS
+#-----------------------------------------------------------------------------
+# Wait until container init scripts finish
+check_container_initialized() {
+  print_debug "Checking to see if container initialization scripts have completed"
+  output_off
+  # Poll for container initialization marker file
+  while [ ! -f /tmp/.container/99-container-init ]; do
+    print_debug "Checking to see if container initialization scripts have completed"
+    sleep 1
+  done
+  output_on
+}
+
+# Wait until a service has been initialized
+check_service_initialized() {
+  print_debug "Checking to see if service has initialized"
+  output_off
+  
+  # Determine service detection mode and suffix
+  if [ "$1" = "init" ]; then
+    service_suffix="-init"
+    check_service_init_bypass=FALSE
+  else
+    service="$1"
+    check_service_init_bypass=TRUE
+  fi
+
+  # Auto-detect service name from script context if not bypassed
+  if [ "${check_service_init_bypass}" = "FALSE" ] ; then
+    if [ -z "$2" ]; then
+      # Determine service name from execution context
+      case "$(dirname "$0")" in
+        "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+          service=$(basename "$0")
+        ;;
+        *)
+          service=$(basename "$PWD")
+        ;;
+      esac
+    else
+      service=$2
+    fi
+  fi
+
+  # Loop until service initialization marker file exists
+  while [ ! -f /tmp/.container/"${service}"${service_suffix} ]
+  do
+    sleep 1
+    print_debug "Waiting for service initialization marker: /tmp/.container/${service}${service_suffix}"
+  done
+  unset check_service_init_bypass
+  output_on
+}
+
+# Mark service initialization as complete
+liftoff() {
+  output_off
+  mkdir -p /tmp/.container
+  service_init_prefix=""
+
+  # Add DONOTSTART prefix if service should not start
+  if [ "${DONOTSTART}" = "TRUE" ]; then
+    service_init_prefix="DONOTSTART "
+  fi
+  
+  # Handle different script execution contexts
+  case "$(dirname "$0")" in
+    "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+      # s6-overlay init script context
+      echo "${service_init_prefix} $(basename "$0")-init initialized on $(log_prefix)" >> /tmp/.container/"$(basename "$0")"-init
+    ;;
+    *)
+      # Use atomic file operation to avoid race condition
+      service_marker="/tmp/.container/$(basename "$PWD")"
+      if [ ! -f "${service_marker}" ]; then
+        echo "$(basename "$PWD") initialized on $(log_prefix)" >> "${service_marker}"
+      else
+        echo "$(basename "$PWD") reinitialized on $(log_prefix)" >> "${service_marker}"
+      fi
+    ;;
+  esac
+  output_on
+}
+
+# Load defaults and functions for a service
+prepare_service() {
+  if [ -n "$1" ] ; then
+    case "$(dirname "$0")" in
+      "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+        # Auto-export variables for s6-overlay init scripts
+        set -a
+        get_defaults "$1"
+        get_functions "$1"
+        set +a
+      ;;
+      *)
+        # Handle different load modes for non-init scripts
+        case "$1" in
+          "BOTH" | "both" | "ALL" | "all" )
+            get_defaults "$2"
+            get_functions "$2"
+          ;;
+          "DEFAULTS" | "defaults" )
+            get_defaults "$2"
+          ;;
+          "FUNCTIONS" | "functions" )
+            get_functions "$2"
+          ;;
+        esac
+      ;;
+    esac
+  else
+    case "$(dirname "$0")" in
+      "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d")
+        # Load all defaults and functions for init scripts
+        set -a
+        get_defaults
+        get_functions
+        set +a
+      ;;
+      *)
+        # Load only defaults for non-init scripts
+        get_defaults
+      ;;
+    esac
+  fi
+}
+
+# Enable a service by creating symlink from available to active
+service_start() {
+  ln -sf /etc/services.available/"${1}" /etc/services.d/
+}
+
+# Disable a service by marking it as DONOTSTART
+service_stop() {
+  echo "DONOTSTART added by $(basename "$0")" >> /tmp/.container/"${1}"-init
+}
+
+#-----------------------------------------------------------------------------
+# LOGGING AND OUTPUT FUNCTIONS
+#-----------------------------------------------------------------------------
+# Generate log prefix when enabled
+log_prefix() {
+  output_off
+  if [ "${CONTAINER_ENABLE_LOG_PREFIX,,}" = "true" ] ; then
+    # Format: YYYY-MM-DD.HH:MM:SS
+    echo "$(date +"${CONTAINER_LOG_PREFIX_DATE_FMT}")${CONTAINER_LOG_PREFIX_SEPARATOR}$(date +"${CONTAINER_PROCESS_HELPER_TIME_FMT}") "
+  fi
+  output_on
+}
+
+# Temporarily disable debug output
+output_off() {
+  if [ "${DEBUG_MODE,,}" = "true" ] ; then
+    set +x
+  fi
+}
+
+# Re-enable debug output (script-aware)
+output_on() {
+  if [ "${DEBUG_MODE,,}" = "true" ] ; then
+    case "$(basename "$0")" in
+      0*-* | 99-* )
+        # Skip debug for init/shutdown scripts
+        :
+      ;;
+      run )
+        case "$PWD" in
+          */0*-* | */99-* )
+            # Skip debug for init/shutdown directories
+            :
+          ;;
+          * )
+            set -x
+          ;;
+        esac
+      ;;
+      * )
+        set -x
+      ;;
+    esac
+  fi
+}
+
+# Print debug message
+print_debug() {
+  output_off
+  # Only output if debug level is enabled
+  if [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] ; then
+    if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+      echo -e "$(log_prefix)[DEBUG] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    else
+      echo -e "$(log_prefix)${background_color_dark_magenta}[DEBUG]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    fi
+  fi
+
+  # Always log to file if debug level is enabled
+  if [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "debug" ] ; then
+    echo -e "$(log_prefix)[DEBUG] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  fi
+  output_on
+}
+
+# Print error message
+print_error() {
+  output_off
+  # Always output error messages regardless of log level
+  if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+    echo -e "$(log_prefix)[ERROR] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+  else
+    echo -e "$(log_prefix)${background_color_light_red}[ERROR]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+  fi
+
+  # Always log errors to file
+  echo -e "$(log_prefix)[ERROR] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  output_on
+}
+
+# Print info message
+print_info() {
+  output_off
+  # Always output info messages
+  if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+    echo -e "$(log_prefix)[INFO] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+  else
+    echo -e "$(log_prefix)${background_color_dark_green}[INFO]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+  fi
+
+  # Always log info to file
+  echo -e "$(log_prefix)[INFO] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  output_on
+}
+
+# Print notice message
+print_notice() {
+  output_off
+  # Output notice messages for debug and notice levels
+  if [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "notice" ] ; then
+    if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+      echo -e "$(log_prefix)[NOTICE] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    else
+      echo -e "$(log_prefix)${background_color_dark_gray}[NOTICE]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    fi
+  fi
+
+  # Log to file for debug and notice levels
+  if [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "debug" ] || [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "notice" ] ; then
+    echo -e "$(log_prefix)[NOTICE] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  fi
+  output_on
+}
+
+# Print service start message with process counter, process-helper integration, and runaway protection
+print_start() {
+  output_off
+  
+  # Process counter and runaway protection logic
+  if [ "${CONTAINER_ENABLE_PROCESS_COUNTER,,}" = "true" ] ; then
+    # Calculate restart count from service marker file
+    if [ -f /tmp/.container/"$(basename "$PWD")" ]; then
+      process_start_count=$(wc -l < /tmp/.container/"$(basename "$PWD")")
+      process_start_wrapper="[${process_start_count}] "
+    fi
+
+    # Set default start count if not determined from file
+    if [ -z "${process_start_count}" ] ; then process_start_count=1 ; fi
+
+    # Process helper integration for external process management
+    process_helper_arguments="$(date +"${CONTAINER_PROCESS_HELPER_DATE_FMT}") $(date +"${CONTAINER_PROCESS_HELPER_TIME_FMT}") $(basename "$(pwd)") ${process_start_count} $(cat /etc/hostname)"
+    if [ -d "${CONTAINER_PROCESS_HELPER_PATH}" ]; then
+      # Try script-specific helper first, then fallback to generic helper
+      if [ -f "${CONTAINER_PROCESS_HELPER_PATH}"/"$(basename "$0")".sh ]; then
+        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"$(basename "$0")".sh "${process_helper_arguments}"
+      elif [ -f "${CONTAINER_PROCESS_HELPER_PATH}"/"${CONTAINER_PROCESS_HELPER_SCRIPT}".sh ] ; then
+        exec "${CONTAINER_PROCESS_HELPER_PATH}"/"${CONTAINER_PROCESS_HELPER_SCRIPT}".sh "${process_helper_arguments}"
+      fi
+    fi
+
+    # Runaway process protection - prevents infinite restart loops
+    if [ "${CONTAINER_PROCESS_RUNAWAY_PROTECTOR,,}" = "true" ] ; then
+      # Enable output on final restart attempt if configured
+      if [ "${CONTAINER_PROCESS_RUNAWAY_SHOW_OUTPUT_FINAL,,}" = "true" ] ; then
+        if [ "${process_start_count}" -eq "${CONTAINER_PROCESS_RUNAWAY_LIMIT}" ] ; then SHOW_OUTPUT=TRUE ; fi
+      fi
+      
+      # Terminate service if restart limit exceeded to prevent system overload
+      if [ "${process_start_count}" -gt "${CONTAINER_PROCESS_RUNAWAY_LIMIT}" ] ; then
+        print_error "POTENTIAL RUNAWAY DETECTED: Disabling $(basename "$PWD") service because it has tried restarting '${CONTAINER_PROCESS_RUNAWAY_LIMIT}' times"
+        s6-svc -d /var/run/s6/legacy-services/"$(basename "$PWD")"
+        sleep 3
+        exit 1
+      fi
+      
+      # Apply restart delay for stability (skip delay on first start)
+      print_debug "[process_restart] - Sleeping for ${CONTAINER_PROCESS_RUNAWAY_DELAY} seconds"
+      if [ "${process_start_count}" -gt 1 ] ; then sleep "${CONTAINER_PROCESS_RUNAWAY_DELAY}" ; fi
+    fi
+  fi
+
+  if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+    echo -e "$(log_prefix)[STARTING] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_start_wrapper}$1"
+  else
+    echo -e "$(log_prefix)${background_color_dark_green}[STARTING]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_start_wrapper}$1"
+  fi
+  echo -e "$(log_prefix)[STARTING] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] ${process_start_wrapper}$1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  output_on
+}
+
+# Print warning message
+print_warn() {
+  output_off
+  # Output warning messages for debug, notice, and warn levels
+  if [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "notice" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "warn" ] ; then
+    if [ "${CONTAINER_COLORIZE_OUTPUT,,}" = "false" ] ; then
+      echo -e "$(log_prefix)[WARN] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    else
+      echo -e "$(log_prefix)${background_color_dark_blue}[WARN]${background_color_off} $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1"
+    fi
+  fi
+
+  # Log to file for debug, notice, and warn levels
+  if [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "debug" ] || [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "notice" ] || [ "${CONTAINER_LOG_FILE_LEVEL,,}" = "warn" ] ; then
+    echo -e "$(log_prefix)[WARN] $SCRIPTPATH/$(basename "$0") ** [${PROCESS_NAME}] $1" >> "${CONTAINER_LOG_FILE_PATH}"/"${CONTAINER_LOG_FILE_NAME}"
+  fi
+
+  output_on
+}
+
+# Execute command silently unless debug/show-output/debug-level requires output
+silent() {
+  if [ "${DEBUG_MODE}" = "true" ] || [ "${SHOW_OUTPUT,,}" = "true" ] || [ "${CONTAINER_LOG_LEVEL,,}" = "debug" ] ;  then
+    "$@"
+  else
+    "$@" > /dev/null 2>&1
+  fi
+}
+
+# Display container banner and image information
+showoff() {
+  output_off
+  if [ -n "${IMAGE_NAME}" ] ; then
+    # Get image version from changelog files
+    image_version=$(get_image_version)
+    
+    # Build image string with decoded banner prefix and image name
+    image_string="$(echo 'H4sICEziXmgAA2FydC50eHQA88xNTE+1AgBoQrPoBgAAAA==' | base64 -d | gunzip) ${IMAGE_NAME}"
+    
+    # Append version information if available
+    if [ ! -z "${image_version// }" ] ; then
+      image_string="${image_string}$(echo 'H4sICDjjXmgAA2FydC50eHQAU6hRCEstKs7MzwMAEAz7rgoAAAA=' | base64 -d | gunzip)${image_version}$(echo 'H4sICHvjXmgAA2FydC50eHQAUwipLEhVUM/MTUxPjU/OSMxLT83JT1dXSMsvUkhJLUnMzCkGALPA/mYjAAAA' | base64 -d | gunzip)"
+    fi
+    
+    # Build repository URL string if available
+    if [ -n "${IMAGE_REPO_URL}" ] ; then
+      image_repo_string="$(echo 'H4sIAAAAAAAAAwtKLcgvzizJL6rUd8lPLs1NzStJLMnMz7PiAgAxTVbtGgAAAA==' | base64 -d | gunzip) ${IMAGE_REPO_URL}"
+    fi
+  fi
+  # Display banner components (base64 encoded ASCII art)
+  echo "H4sICCjiXmgAA2FydC50eHQApVNBDsMgDLvnFTx3x1UqqzQpn+Ml67pCA3GAdBWHyiSOMYbS6wFW3AJGMWyRiL7vh/gQPsM5VqtE/FuAR8aN8t+a4lMsBng7c6KlwhdpWKmSdt5lbrlSfNfIqsUM1bqH5sbsKcreYYIasZgR61fIzWmuCt4PwaGvDusZiNVH1Eljjytmm5ko2xXIBfLYVQf1DMRedWdAmRqBO27ckrHlefh1TBtzbvK3PI4bVRnqjPxZkAuo+BeKbdUjPZ1HMAJncMHH9lAnC/zHY1zC+Woj+gAEDFujKAcAAA==" | base64 -d | gunzip
+  echo "${image_string}"
+  echo "${image_repo_string}"
+  echo "H4sICOPfXmgAA2FydC50eHQA88lMTs0rTrVS8PUMUahROLRSwcjAyETBLT85NScRACbcgYgdAAAA" | base64 -d | gunzip
+  echo ""
+  echo "H4sICAd7m2gAA2FydC50eHQAXYwxEsIwDAT7vOIeAKFPS0XBI0QsEw+2ZSQ5mfwe11y1szN7jwjfkiEVejOayp4CG07p2Cl3xhV3qTakwtog0VTfKCcO0Q+iKFapnmrnMAXeOUsrXP0CT4Xzid4COdsFVAMik3dlKH87m9s8zkthXRNlWG9N1EE7pUyvzPM04W9PGfWjRlmAzb3ZcrsdxzFHWTnTvEr5AfE+Lc/RAAAA" | base64 -d | gunzip
+  echo ""
+  output_on
+}
+
+#-----------------------------------------------------------------------------
+# DEVELOPMENT AND DEPLOYMENT UTILITY FUNCTIONS
+#-----------------------------------------------------------------------------
+# Clone a git repository with depth control and submodule support
+clone_git_repo() {
+  set +x
+  if [ "${DEBUG_MODE,,}" = "true" ] ; then set -x ; fi
+  
+  # Verify git is available
+  if ! [ -x "$(command -v git)" ]; then
+    echo '[clone_git_repo] Git is not installed'
+    exit 1
+  else
+    git config --global init.defaultBranch main
+  fi
+
+  if [ -n "$1" ] ; then
+    # Determine repository destination path
+    if [ -n "${3}" ] ; then
+      repository_path="${3}/"
+      repository_text_description="to '${3}'"
+      # Sanitize repository name for environment variable use
+      sanitized_repo_name="$(echo "${1,,}" | sed -e "s|-|_|g" -e "s|\.git||g" | awk -F/ '{print $NF}' | sed 's/[^a-zA-Z0-9_]//g')"
+    else
+      repository_path="/usr/src/$(echo "${1,,}" | sed -e "s|-|_|g" -e "s|\.git||g" | awk -F/ '{print $NF}' | sed 's/[^a-zA-Z0-9_]//g')"
+      # Sanitize repository name for environment variable use
+      sanitized_repo_name="$(echo "${1,,}" | sed -e "s|-|_|g" -e "s|\.git||g" | awk -F/ '{print $NF}' | sed 's/[^a-zA-Z0-9_]//g')"
+    fi
+
+    # Export repository source environment variables
+    export GIT_REPO_SRC="${GIT_REPO_SRC:-"${repository_path}"}"
+    export "GIT_REPO_SRC_${sanitized_repo_name^^}"="${repository_path}"
+    
+    # Check if destination directory already exists
+    if [ -d "${repository_path}" ] ; then
+      echo "[clone_git_repo] Directory ${repository_path} already exists. Cannot clone"
+      exit 1
+    else
+      # Add .git suffix if not present in repository URL
+      if [[ $1 == *".git" ]] ; then
+        git_suffix_append=""
+      else
+        git_suffix_append=".git"
+      fi
+
+      # Initialize git repository and clone
+      mkdir -p "${repository_path}"
+      cd "${repository_path}"
+      git init .
+      git remote add origin "${1}""${git_suffix_append}"
+      if [ -n "${2}" ] ; then target_commit_or_branch="${2}" ; fi
+      echo "[clone_git_repo] Cloning Git Repo '${1}' '${2}' '${repository_text_description}'"
+      git fetch --depth=1 origin "${2}" +refs/tags/*:refs/tags/*
+      git fetch --depth 1 origin "${2}"
+      git -c advice.detachedHead=false checkout FETCH_HEAD
+      git submodule update --init
+    fi
+  else
+    echo "[clone_git_repo] You tried to call the function but there's no arguments"
+    exit 1
+  fi
+  output_on
+}
+
+#-----------------------------------------------------------------------------
+# FILE AND TEMPLATE UTILITY FUNCTIONS
+#-----------------------------------------------------------------------------
+# Create a logrotate configuration file for a service
+create_logrotate() {
+  if [ -n "$1" ] && [ -n "$2" ]; then
+    if [ ! -f /assets/logrotate/"$1" ] ; then
+      print_debug "Creating Logrotate Entry for $2"
+      # Add logship configuration if specified
+      if [ -n "$3" ] ; then
+        if [ "${3,,}" != "none" ] ; then
+          lrlsparser="# logship: $3"
+        fi
+      fi
+      # Add user/group ownership if specified
+      if [ -n "$4" ] && [ -n "$5" ]; then
+        lruser="    su $4 $5"
+      fi
+
+      if [ ! -d "/assets/logrotate" ] ; then
+        mkdir -p /assets/logrotate
+      fi
+
+      cat <<EOF > /assets/logrotate/"${1}"
+${lrlsparser}
+$2 {
+    missingok
+${lruser}
+}
+EOF
+      chown root:root /assets/logrotate/"${1}"
+      chmod 0644 /assets/logrotate/"${1}"
+    else
+              print_debug "Skipping creating automatic logrotation for '${1}'"
+    fi
+  fi
+}
+
+# Copy custom files from source to destination with optional ownership
+custom_files() {
+  if [ -n "${2}" ] ; then
+    # Both source and destination specified
+    custom_files_source="${1}"
+    custom_files_destination="${2}"
+  else
+    # Only destination specified, use default source
+    custom_files_source="${CONTAINER_CUSTOM_PATH}"
+    custom_files_destination="${1}"
+  fi
+
+  if [ -d "${custom_files_source}" ] && dir_notempty "${custom_files_source}" ; then
+    print_debug "Custom Files: Copying files from '${custom_files_source}' to '${custom_files_destination}'"
+    if [ ! -d "${custom_files_destination}" ] ; then
+      mkdir -p "${custom_files_destination}"
+    fi
+    cp -aR "${custom_files_source}"/* "${custom_files_destination}"/
+  fi
+
+  # Build permission specification for ownership change
+  if [ -n "${3}" ] ; then permission_spec="${3}" ; fi
+  if [ -n "${4}" ] ; then 
+    if [ -n "${3}" ] ; then
+      permission_spec="${3}:${4}"
+    else
+      permission_spec=":${4}"
+    fi
+  fi
+  if [ -n "${permission_spec}" ] ; then chown -R "${permission_spec}" "${custom_files_destination}" ; fi
+}
+
+# Execute custom scripts in a directory
+custom_scripts() {
+  if [ -n "${1}" ] ; then
+    custom_scripts_source="${1}"
+  else
+    custom_scripts_source="${CONTAINER_CUSTOM_SCRIPTS_PATH}"
+  fi
+
+  if [ -d "${custom_scripts_source}" ] && dir_notempty "${custom_scripts_source}" ; then
+    for custom_script in "${custom_scripts_source}"/*.sh ; do
+      if [ -x "$custom_script" ] && [ ! -d "$custom_script" ] ; then
+        print_debug "Custom Script executing: '${custom_script}'"
+        "${custom_script}"
+      fi
+    done
+  fi
+}
+
+# Test if directory is empty
+dir_empty() {
+  [ ! -n "$(ls -A "$1" 2>/dev/null)" ]
+}
+
+# Test if directory is not empty
+dir_notempty() {
+  [ -n "$(ls -A "$1" 2>/dev/null)" ]
+}
+
+# Apply ownership and permissions to destination path
+install_template() {
+  if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ] ; then
+    print_error "[install_template] No arguments passed"
+    exit 1
+  fi
+
+  local template_mode="${4:-"0644"}"
+  if [ ! -f "$2" ]; then
+            print_error "[install_template] Can't find '${2}'"
+    exit 1
+  fi
+
+  if [ ! -d "$(dirname "$3")" ] ; then
+    mkdir -p "$(dirname "$3")"
+  fi
+
+  cp "$2" "$3"
+  chmod "${template_mode}" "${3}"
+  chown "${1}" "${3}"
+}
+
+# Transform variables ending in _FILE into their file contents
+transform_file_var() {
+  local variables
+  variables=$(echo "$@" | tr " " "\n")
+  for variable in $variables; do
+    if [ -v "${variable}"_FILE ] ; then
+      file_variable="${variable}_FILE"
+      if [ ! -f "${!file_variable}" ] ; then
+        print_error "[transform_file_var] ${variable}_FILE set as environment variable, however file doesn't exist"
+        return 1
+      fi
+      # Read file content and export as environment variable
+      export "${variable}"="$(cat "${!file_variable}")"
+    fi
+  done
+  unset file_variable
+  unset variables
+}
+
+# Update template files by substituting variables
+update_template() {
+  template_files="${1}"
+  templates=$(echo "${template_files}" | tr " " "\n")
+  shift
+  for template_file in $templates; do
+
+    [[ ! -f "${template_file}" ]] && return 1
+
+    template_variables=($@)
+    template_user=$(stat -c %U "${template_file}")
+    
+    # Validate template_user exists and is safe for sudo operations
+    if ! id "${template_user}" >/dev/null 2>&1; then
+      print_error "[update_template] Invalid user '${template_user}' for template file '${template_file}'"
+      return 1
+    fi
+    
+    template_tmp_file=$(mktemp)
+    # Create temporary copy for safe variable substitution
+    cp -a "${template_file}" "${template_tmp_file}"
+
+    for template_variable in ${template_variables[@]}; do
+      # Escape special regex characters to prevent shell injection
+      escaped_variable=$(echo "${template_variable}" | sed 's/[\[\].*^$()+?{|/]/\\&/g')
+      sed -ri "s/[{]{2}${escaped_variable}[}]{2}/\${${template_variable}}/g" "${template_tmp_file}"
+      print_debug "[update_template] Template: '${template_file}' updating field '${template_variable}'"
+    done
+
+    # Export variables individually and process template with envsubst
+    (
+      for template_variable in "${template_variables[@]}"; do
+        export "${template_variable}"
+      done
+      local IFS=":"
+      # Process template with envsubst and apply with proper ownership
+      sudo -HEu "${template_user}" envsubst "${template_variables[*]}" < "${template_tmp_file}" | sudo -u "${template_user}" tee "${template_file}" > /dev/null
+    )
+
+    rm -f "${template_tmp_file}"
+  done
+}
+
+#-----------------------------------------------------------------------------
+# WAIT AND MONITORING FUNCTIONS
+#-----------------------------------------------------------------------------
+# Wait until directory exists (blocks until creation)
+wait_for_directory() {
+  print_debug "Looking for existence of directory: $1"
+  # Infinite loop until directory is created - no timeout protection
+  while [ ! -d "${1}" ] ; do
+    sleep 1
+  done
+}
+
+# Wait until file exists (blocks until creation)
+wait_for_file() {
+  print_debug "Looking for existence of file: $1"
+  # Infinite loop until file is created - no timeout protection
+  while [ ! -f "${1}" ] ; do
+    sleep 1
+  done
+}
+
+# Wait until socket exists (blocks until creation)
+wait_for_socket() {
+  print_debug "Looking for existence of socket: $1"
+  # Infinite loop until socket is created - no timeout protection
+  while [ ! -S "${1}" ] ; do
+    sleep 1
+  done
+}
+
+# Wait until a host:port is listening (with retry logging)
+wait_for_port() {
+  print_debug "Looking for existence of listening port on $1:$2"
+  counter=0
+  # Retry every 5 seconds until port is available, with progress logging
+  while ! nc -z "${1}" "${2}" ; do
+    sleep 5
+    (( counter+=5 ))
+    print_warn "Host '${1}' is not listening on port '${2}', retrying.. (${counter} seconds so far)"
+  done
+}
+
+#-----------------------------------------------------------------------------
+# DOCKER SECRETS AND ENVIRONMENT HANDLING
+#-----------------------------------------------------------------------------
+# Load Docker secrets from _FILE environment variables (enforces presence)
+file_env() {
+  if [ "${CONTAINER_ENABLE_DOCKER_SECRETS,,}" = "true" ] ; then
+    local var="$1"
+    local fileVar="${var}_FILE"
+    local def="${2:-}"
+    local resolved_value="$def"
+    
+    # Docker secrets resolution with security priority order
+    # _FILE variables take precedence for security (avoid environment variable exposure)
+    if [ "${!fileVar:-}" ]; then
+      resolved_value="$(cat "${!fileVar}")"
+    elif [ "${!var:-}" ]; then
+      resolved_value="${!var}"
+    fi
+
+    # Enforce required variable presence for security-critical operations
+    if [ -z "${resolved_value}" ]; then
+      print_error "error: neither $var nor $fileVar are set but are required"
+      exit 1
+    fi
+    export "$var"="$resolved_value"
+    unset "$fileVar"
+  fi
+}
+
+#-----------------------------------------------------------------------------
+# CONFIGURATION LOADING FUNCTIONS
+#-----------------------------------------------------------------------------
+# Load default environment variables from assets/defaults/
+get_defaults() {
+  if [ -n "$1" ] ; then
+    case "${1,,}" in
+      "all" )
+        for defaults_file in /assets/defaults/* ; do
+          print_debug "Container: Getting defaults for '${defaults_file}' ALL"
+          # shellcheck source=/assets/defaults/
+          case "$(basename "${defaults_file}")" in
+            0*-* | 99-* )
+              # Suppress output for init/shutdown scripts
+              output_off
+              source "${defaults_file}"
+              output_on
+            ;;
+            * )
+              source "${defaults_file}"
+            ;;
+          esac
+        done
+      ;;
+      "app" | "single" )
+        case "$(dirname "$0")" in
+          "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+            if [ -f "/assets/defaults/$(basename "$0")" ] ; then
+              print_debug "Container: Getting defaults for '$(basename "$0")'"
+              # shellcheck source=/assets/defaults/
+                      case "$(basename "$0")" in
+          0*-* | 99-* )
+            # Suppress output for init/shutdown scripts
+            output_off
+            source /assets/defaults/"$(basename "$0")"
+            output_on
+          ;;
+          * )
+            source /assets/defaults/"$(basename "$0")"
+          ;;
+        esac
+            else
+              print_debug "Container: No defaults available for '$(basename "$0")'"
+            fi
+          ;;
+          *)
+            if [ -f "/assets/defaults/$(basename "$PWD")" ] ; then
+              print_debug "Container: Getting defaults for '$(basename "$PWD")'"
+              # shellcheck source=/assets/defaults/
+              case "$(basename "$PWD")" in
+                0*-* | 99-* )
+                  output_off
+                  source /assets/defaults/"$(basename "$PWD")"
+                  output_on
+                ;;
+                * )
+                  source /assets/defaults/"$(basename "$PWD")"
+                ;;
+              esac
+            else
+              print_debug "Container: No defaults available for $(basename "$PWD")"
+            fi
+          ;;
+        esac
+      ;;
+      * )
+        defaults_list=$(echo "$1" | tr "," "\n")
+        for defaults_item in $defaults_list; do
+          if [ -f "/assets/defaults/${defaults_item}" ] ; then
+            print_debug "Container: Getting defaults for $defaults_item"
+            # shellcheck source=/assets/defaults/
+            case "${defaults_item}" in
+              0*-* | 99-* )
+                output_off
+                source /assets/defaults/"${defaults_item}"
+                output_on
+              ;;
+              * )
+                source /assets/defaults/"${defaults_item}"
+              ;;
+            esac
+          else
+            print_debug "Container: No defaults available for '${defaults_item}'"
+          fi
+        done
+      ;;
+    esac
+  else
+    # Source 00-container only once to avoid redundant sourcing
+    source /assets/defaults/00-container
+    for defaults_file in /assets/defaults/* ; do
+      # Skip 00-container since it's already sourced above
+      if [ "$(basename "${defaults_file}")" = "00-container" ]; then
+        continue
+      fi
+      print_debug "Container: Getting defaults for $defaults_file"
+      # shellcheck source=/assets/defaults/
+      case "$(basename "${defaults_file}")" in
+        0*-* | 99-* )
+          output_off
+          source "${defaults_file}"
+          output_on
+        ;;
+        * )
+          source "${defaults_file}"
+        ;;
+      esac
+    done
+  fi
+}
+
+# Load function libraries from assets/functions/
+get_functions() {
+  if [ -n "$1" ] ; then
+    case "${1,,}" in
+      "all" )
+        for functions_file in /assets/functions/* ; do
+          if [ "$functions_file" != "/assets/functions/00-container" ] ; then
+            print_debug "Container: Getting functions for '${functions_file}'"
+            # shellcheck source=/assets/functions/
+            source "$functions_file"
+          fi
+        done
+      ;;
+      "app" | "single" )
+        case "$(dirname "$0")" in
+          "/var/run/s6/etc/cont-init.d" | "/etc/cont-init.d" )
+            if [ -f "/assets/functions/$(basename "$0")" ] ; then
+              print_debug "Container: Getting functions for '$(basename "$0")'"
+              # shellcheck source=/assets/functions/
+              source /assets/functions/"$(basename "$0")"
+            else
+              print_debug "Container: No functions available for '$(basename "$0")'"
+            fi
+          ;;
+          *)
+            if [ -f "/assets/functions/$(basename "$PWD")" ] ; then
+              print_debug "Container: Getting functions for '$(basename "$PWD")'"
+              # shellcheck source=/assets/functions/
+              source /assets/functions/"$(basename "$PWD")"
+            else
+              print_debug "Container: No functions available for $(basename "$PWD")"
+            fi
+          ;;
+        esac
+      ;;
+      * )
+        functions_list=$(echo "$1" | tr "," "\n")
+        for functions_item in $functions_list; do
+          if [ -f "/assets/functions/${functions_item}" ] ; then
+            print_debug "Container: Getting functions for $functions_item"
+            # shellcheck source=/assets/functions/
+            source /assets/functions/"${functions_item}"
+          else
+            print_debug "Container: No functions available for '$functions_item'"
+          fi
+        done
+      ;;
+    esac
+  else
+    for functions_file in /assets/functions/* ; do
+      if [ "$functions_file" != "/assets/functions/00-container" ] ; then
+        print_debug "Container: Getting functions for $functions_file"
+        # shellcheck source=/assets/functions/
+        source "${functions_file}"
+      fi
+    done
+  fi
+}
+
+# Get image version from changelog files
+get_image_version() {
+  output_off
+  if [ -n "${IMAGE_NAME}" ] ; then
+    # Try multiple changelog file naming patterns
+    if [ -f "/assets/.changelogs/${IMAGE_NAME/\//_}.md" ] ; then
+      image_version=$(head -n1 "/assets/.changelogs/${IMAGE_NAME/\//_}.md" | awk '{print $2}')
+    elif [ -f "/assets/.changelogs/docker-${IMAGE_NAME/\//_}.md" ] ; then
+      image_version=$(head -n1 "/assets/.changelogs/docker-${IMAGE_NAME/\//_}.md" | awk '{print $2}')
+    elif [ -f "/assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md" ] ; then
+      image_version=$(head -n1 "/assets/.changelogs/focela_docker-${IMAGE_NAME/\//_}.md" | awk '{print $2}')
+    else
+      # Fallback to repository URL-based changelog
+      strip_image_repo_url="$(echo "${IMAGE_REPO_URL%/}" | sed "s#https://github.com/##g")"
+      if [ -f "/assets/.changelogs/${strip_image_repo_url/\//_}.md" ] ; then
+        image_version=$(head -n1 "/assets/.changelogs/${strip_image_repo_url/\//_}.md" | awk '{print $2}')
+      fi
+    fi
+
+    if [ -n "${image_version}" ] ; then
+      echo "${image_version}"
+    fi
+  fi
+  output_on
+}
+
+#-----------------------------------------------------------------------------
+# SYSTEM CONFIGURATION FUNCTIONS
+#-----------------------------------------------------------------------------
+# Add host overrides to /etc/hosts from CONTAINER_HOST_OVERRIDE_*
+host_override() {
+  # Process all host override variables without assuming sequential numbering
+  printenv | grep -E '^CONTAINER_HOST_OVERRIDE_([0-9]+)' | while IFS='=' read -r variable_name variable_value; do
+    host_variable_suffix=$(echo "${variable_name}" | sed 's/^CONTAINER_HOST_OVERRIDE_//')
+    host_target_ip=$(echo "${variable_value}" | awk '{print $1}')
+
+    # Convert hostname to IP address if needed
+    if [[ ! "${host_target_ip}" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+      # Resolve hostname to IPv4 address using getent
+      host_target_ip="$(getent ahostsv4 "${host_target_ip}" | grep -m 1 STREAM | awk '{print $1}')"
+    fi
+
+    # Add successful resolutions to /etc/hosts
+    if [ -n "${host_target_ip}" ]; then
+      echo "# Added automatically by CONTAINER_HOST_OVERRIDE_${host_variable_suffix}" >> /etc/hosts
+      # Extract hostnames from variable value and add to /etc/hosts
+      hostnames=$(echo "${variable_value}" | cut -d' ' -f2-)
+      echo "${host_target_ip} ${hostnames}" >> /etc/hosts
+    fi
+  done
+}
+
+# Ensure an environment variable is set
+sanity_var() {
+  output_off
+  print_debug "Looking for existence of $1 environment variable"
+  if [ ! -v "$1" ]; then
+    print_error "No '$2' Entered! - Set '\$$1'"
+    exit 1
+  fi
+  output_on
+}
+
+# Set timezone if different from current
+set_timezone() {
+  if [ -f /usr/share/zoneinfo/"${TIMEZONE}" ]; then
+    if [ "${TIMEZONE}" != "$(cat /etc/timezone)" ] ; then
+      print_notice "Timezone: Setting to '${TIMEZONE}' from '$(cat /etc/timezone)'"
+      cp -R /usr/share/zoneinfo/"${TIMEZONE}" /etc/localtime
+      echo "${TIMEZONE}" > /etc/timezone
+    fi
+  else
+    print_warn "Timezone: ${TIMEZONE} does not exist - Using '$(cat /etc/timezone)'"
+  fi
+}
+
+#-----------------------------------------------------------------------------
+# VARIABLE TRANSFORMATION FUNCTIONS
+#-----------------------------------------------------------------------------
+# Convert true/false to On/Off
+truefalse_onoff() {
+  value="$(set | grep "${1}"= | cut -d '=' -f2)"
+  var="$(set | grep "${1}"= | sed "s/=.*//g")"
+
+  if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'On'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=ON"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=on"
+        ;;
+      esac
+    else
+      export "$1=ON"
+    fi
+  elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'Off'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=OFF"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=off"
+        ;;
+      esac
+    else
+      export "$1=off"
+    fi
+  fi
+}
+
+# Convert true/false to 1/0
+truefalse_onezero() {
+  value="$(set | grep "${1}"= | cut -d '=' -f2)"
+  var="$(set | grep "${1}"= | sed "s/=.*//g")"
+
+  if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
+    print_debug "Converting Variable Name ${var} value to '1'"
+    unset "$1"
+    export "$1=1"
+  elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
+    print_debug "Converting Variable Name ${var} value to '0'"
+    unset "$1"
+    export "$1=0"
+  fi
+}
+
+# Convert true/false to yes/no
+truefalse_yesno() {
+  value="$(set | grep "${1}"= | cut -d '=' -f2)"
+  var="$(set | grep "${1}"= | sed "s/=.*//g")"
+
+  if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'yes'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=YES"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=yes"
+        ;;
+      esac
+    else
+      export "$1=yes"
+    fi
+  elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'no'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=NO"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=no"
+        ;;
+      esac
+    else
+      export "$1=no"
+    fi
+  fi
+}
+
+# Test if value is false/no
+var_false() {
+  [ "${1,,}" = "false" ] || [ "${1,,}" = "no" ]
+}
+
+# Test if value is not false
+var_notfalse() {
+  [ "${1,,}" != "false" ]
+}
+
+# Test if value is not true
+var_nottrue() {
+  [ "${1,,}" != "true" ]
+}
+
+# Test if value is true/yes
+var_true() {
+  [ "${1,,}" = "true" ] || [ "${1,,}" = "yes" ]
+}
+
+# Convert yes/no to true/false
+yesno_truefalse() {
+  value="$(set | grep "${1}"= | cut -d '=' -f2)"
+  var="$(set | grep "${1}"= | sed "s/=.*//g")"
+
+  if [ "${value,,}" = "true" ] || [ "${value,,}" = "yes" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'true'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=TRUE"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=true"
+        ;;
+      esac
+    else
+      export "$1=TRUE"
+    fi
+  elif [ "${value,,}" = "false" ] || [ "${value,,}" = "no" ] ; then
+    print_debug "Converting Variable Name ${var} value to 'false'"
+    unset "$1"
+    if [ -n "$2" ] ; then
+      case "${2,,}" in
+        "uppercase" | "upper" | "uc" )
+          export "$1=FALSE"
+        ;;
+        "lowercase" | "lower" | "lc" )
+          export "$1=false"
+        ;;
+      esac
+    else
+      export "$1=FALSE"
+    fi
+  fi
+}
+
+#-----------------------------------------------------------------------------
+# DATABASE CONNECTIVITY FUNCTIONS
+#-----------------------------------------------------------------------------
+# Wait for database to become ready (supports multiple backends)
+db_ready() {
+  output_off
+  print_debug "Checking to see if Database Type $1 is ready"
+  case "${1,,}" in
+    "couch" | "couchdb" )
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then couch_port=${DB_PORT} ; fi ;
+      transform_file_var COUCHDB_PORT
+      if [ -n "${COUCHDB_PORT}" ] ; then couch_port=${COUCHDB_PORT} ; fi ;
+      couch_port=${couch_port:-5984}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then couch_host=${DB_HOST} ; fi ;
+      transform_file_var COUCHDB_HOST
+      if [ -n "${COUCHDB_HOST}" ] ; then couch_host=${COUCHDB_HOST} ; fi ;
+      counter=0
+      # shellcheck disable=SC2086
+      while ! (nc -z "${couch_host}" ${couch_port}) ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "CouchDB Host '${couch_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "influx" | "influxdb" )
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then influx_port=${DB_PORT} ; fi ;
+      transform_file_var INFLUXDB_PORT
+      if [ -n "${INFLUXDB_PORT}" ] ; then influx_port=${INFLUXDB_PORT} ; fi ;
+      influx_port=${influx_port:-8088}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
+      transform_file_var INFLUXDB_HOST
+      if [ -n "${INFLUXDB_HOST}" ] ; then influx_host=${INFLUXDB_HOST} ; fi ;
+      counter=0
+      while ! (nc -z "${influx_host}" "${influx_port}") ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "InfluxDB Host '${influx_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "mongo" | "mongodb" )
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then mongo_port=${DB_PORT} ; fi ;
+      transform_file_var MONGO_PORT
+      if [ -n "${MONGO_PORT}" ] ; then mongo_port=${MONGO_PORT} ; fi ;
+      mongo_port=${mongo_port:-27017}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then mongo_host=${DB_HOST} ; fi ;
+      transform_file_var MONGO_HOST
+      if [ -n "${MONGO_HOST}" ] ; then mongo_host=${MONGO_HOST} ; fi ;
+      counter=0
+      while ! (nc -z "${mongo_host}" "${mongo_port}") ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "Mongo Host '${mongo_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "mysql" | "mariadb" )
+      if command -v "mariadb-admin" &> /dev/null ; then
+        mysqladmin_bin="$(which mariadb-admin)"
+      elif command -v "mysqladmin" &> /dev/null ; then
+        mysqladmin_bin="$(which mysqladmin)"
+      else
+        print_error "No MySQL or MariaDB client detected - Cannot check for Database"
+        exit 1
+      fi
+      # Disable SSL for database connectivity checks to avoid connection issues
+      if [ ! -f /etc/my.cnf.d/disable-ssl.cnf ] ; then
+        cat <<EOF > /etc/my.cnf.d/disable-ssl.cnf
+[client]
+ssl=FALSE
+EOF
+      fi
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then maria_port=${DB_PORT} ; fi ;
+      transform_file_var MYSQL_PORT
+      if [ -n "${MYSQL_PORT}" ] ; then maria_port=${MYSQL_PORT} ; fi ;
+      transform_file_var MARIA_PORT
+      if [ -n "${MARIA_PORT}" ] ; then maria_port=${MARIA_PORT} ; fi ;
+      maria_port=${maria_port:-3306}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then maria_host=${DB_HOST} ; fi ;
+      transform_file_var MYSQL_HOST
+      if [ -n "${MYSQL_HOST}" ] ; then maria_host=${MYSQL_HOST} ; fi ;
+      transform_file_var MARIA_HOST
+      if [ -n "${MARIA_HOST}" ] ; then maria_host=${MARIA_HOST} ; fi ;
+      transform_file_var DB_USER
+      if [ -n "${DB_USER}" ] ; then maria_user=${DB_USER} ; fi ;
+      transform_file_var MYSQL_USER
+      if [ -n "${MYSQL_USER}" ] ; then maria_user=${MYSQL_USER} ; fi ;
+      transform_file_var MARIA_USER
+      if [ -n "${MARIA_USER}" ] ; then maria_user=${MARIA_USER} ; fi ;
+      transform_file_var DB_PASS
+      if [ -n "${DB_PASS}" ] ; then maria_pass=${DB_PASS} ; fi ;
+      transform_file_var MYSQL_PASS
+      if [ -n "${MYSQL_PASS}" ] ; then maria_pass=${MYSQL_PASS} ; fi ;
+      transform_file_var MARIA_PASS
+      if [ -n "${MARIA_PASS}" ] ; then maria_pass=${MARIA_PASS} ; fi ;
+      transform_file_var DB_NAME
+      if [ -n "${DB_NAME}" ] ; then maria_name=${DB_NAME} ; fi ;
+      transform_file_var MYSQL_NAME
+      if [ -n "${MYSQL_NAME}" ] ; then maria_name=${MYSQL_NAME} ; fi ;
+      transform_file_var MARIA_NAME
+      if [ -n "${MARIA_NAME}" ] ; then maria_name=${MARIA_NAME} ; fi ;
+      counter=0
+      while ! ("${mysqladmin_bin}" -u"${maria_user}" -P"${maria_port}" -h"${maria_host}" -p"${maria_pass}" status > /dev/null 2>&1) ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "MySQL/MariaDB Server '${maria_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "pgsql" | "psql" | "postgres" | "postgresql" )
+      if command -v "pg_isready" &> /dev/null ; then
+        pg_isready_bin="$(which pg_isready)"
+      else
+        print_error "No PostgreSQL client installation detected - Cannot check for Database"
+        exit 1
+      fi
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then postgres_port=${DB_PORT} ; fi ;
+      transform_file_var POSTGRES_PORT
+      if [ -n "${POSTGRES_PORT}" ] ; then postgres_port=${POSTGRES_PORT} ; fi ;
+      postgres_port=${postgres_port:-5432}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then postgres_host=${DB_HOST} ; fi ;
+      transform_file_var POSTGRES_HOST
+      if [ -n "${POSTGRES_HOST}" ] ; then postgres_host=${POSTGRES_HOST} ; fi ;
+      transform_file_var DB_USER
+      if [ -n "${DB_USER}" ] ; then postgres_user=${DB_USER} ; fi ;
+      transform_file_var POSTGRES_USER
+      if [ -n "${POSTGRES_USER}" ] ; then postgres_user=${POSTGRES_USER} ; fi ;
+      transform_file_var DB_PASS
+      if [ -n "${DB_PASS}" ] ; then postgres_pass=${DB_PASS} ; fi ;
+      transform_file_var PGPASSWORD
+      if [ -n "${PGPASSWORD}" ] ; then postgres_pass=${PGPASSWORD} ; fi ;
+      transform_file_var DB_NAME
+      if [ -n "${DB_NAME}" ] ; then postgres_name=${DB_NAME} ; fi ;
+      transform_file_var POSTGRES_NAME
+      if [ -n "${POSTGRES_NAME}" ] ; then postgres_name=${POSTGRES_NAME} ; fi ;
+      counter=0
+      export PGPASSWORD=${postgres_pass}
+      until "${pg_isready_bin}" --dbname="${postgres_name}" --host="${postgres_host}" --port="${postgres_port}" --username="${postgres_user}" -q
+      do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "Postgres Host '${postgres_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "rabbit" | "rabbitmq" )
+      transform_file_var DB_PORT
+      if [ -n "${DB_PORT}" ] ; then rabbit_port=${DB_PORT} ; fi ;
+      transform_file_var RABBIT_PORT
+      if [ -n "${RABBIT_PORT}" ] ; then rabbit_port=${RABBIT_PORT} ; fi ;
+      rabbit_port=${rabbit_port:-5672}
+      transform_file_var DB_HOST
+      if [ -n "${DB_HOST}" ] ; then rabbit_host=${DB_HOST} ; fi ;
+      transform_file_var RABBIT_HOST
+      if [ -n "${RABBIT_HOST}" ] ; then rabbit_host=${RABBIT_HOST} ; fi ;
+      counter=0
+      while ! (nc -z "${rabbit_host}" "${rabbit_port}") ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "RabbitMQ Host '${rabbit_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "redis" )
+      transform_file_var DB_PORT
+      transform_file_var DB_HOST
+      transform_file_var REDIS_PORT
+      transform_file_var REDIS_HOST
+      if [ -n "${DB_PORT}" ] ; then redis_port=${DB_PORT} ; fi ;
+      if [ -n "${REDIS_PORT}" ] ; then redis_port=${REDIS_PORT} ; fi ;
+      redis_port=${redis_port:-6379}
+      if [ -n "${DB_HOST}" ] ; then redis_host=${DB_HOST} ; fi ;
+      if [ -n "${REDIS_HOST}" ] ; then redis_host=${REDIS_HOST} ; fi ;
+      counter=0
+      while ! (nc -z "${redis_host}" "${redis_port}") ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "Redis Host '${redis_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+    "rethink" )
+      transform_file_var DB_PORT
+      transform_file_var DB_HOST
+      transform_file_var RETHINK_PORT
+      transform_file_var RETHINK_HOST
+      if [ -n "${DB_PORT}" ] ; then rethink_port=${DB_PORT} ; fi ;
+      if [ -n "${RETHINK_PORT}" ] ; then rethink_port=${RETHINK_PORT} ; fi ;
+      rethink_port=${rethink_port:-28015}
+      if [ -n "${DB_HOST}" ] ; then rethink_host=${DB_HOST} ; fi ;
+      if [ -n "${RETHINK_HOST}" ] ; then rethink_host=${RETHINK_HOST} ; fi ;
+      counter=0
+      while ! (nc -z "${rethink_host}" "${rethink_port}") ; do
+        sleep 5
+        (( counter+=5 ))
+        print_warn "RethinkDB Host '${rethink_host}' is not accessible, retrying.. (${counter} seconds so far)"
+      done
+    ;;
+  esac
+  output_on
+}
+
+# Validate required database parameters
+sanity_db() {
+  output_off
+  if [ -n "$1" ] ; then
+    case "${1,,}" in
+      "couch" | "couchdb" )
+        print_debug "Checking Couch DB Parameters"
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then couch_host=${DB_HOST} ; fi ;
+        transform_file_var COUCH_HOST
+        if [ -n "${COUCH_HOST}" ] ; then couch_host=${COUCH_HOST} ; fi ;
+        if [ -z "${couch_host}" ] ; then
+          print_error "No Couch Database Host Entered! - Set '\$DB_HOST' or '\$COUCH_HOST'"
+          exit 1
+        fi
+      ;;
+      "influx" | "influxdb")
+        print_debug "Checking Influx DB Parameters"
+        transform_file_var DB_HOST
+        transform_file_var INFLUX_HOST
+        if [ -n "${DB_HOST}" ] ; then influx_host=${DB_HOST} ; fi ;
+        if [ -n "${INFLUX_HOST}" ] ; then influx_host=${INFLUX_HOST} ; fi ;
+        if [ -z "${influx_host}" ] ; then
+          print_error "No Influx Database Host Entered! - Set '\$DB_HOST' or '\$INFLUX_HOST'"
+          exit 1
+        fi
+      ;;
+      "mongo" | "mongodb" )
+        print_debug "Checking Mongo DB Parameters"
+        transform_file_var DB_HOST
+        transform_file_var MONGO_HOST
+        if [ -n "${DB_HOST}" ] ; then mongo_host=${DB_HOST} ; fi ;
+        if [ -n "${MONGO_HOST}" ] ; then mongo_host=${MONGO_HOST} ; fi ;
+        if [ -z "${mongo_host}" ] ; then
+          print_error "No Mongo Database Host Entered! - Set '\$DB_HOST' or '\$MONGO_HOST'"
+          exit 1
+        fi
+      ;;
+      "mysql" | "mariadb" )
+        print_debug "Checking MariaDB DB Parameters"
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then maria_host=${DB_HOST} ; fi ;
+        transform_file_var MYSQL_HOST
+        if [ -n "${MYSQL_HOST}" ] ; then maria_host=${MYSQL_HOST} ; fi ;
+        transform_file_var MARIA_HOST
+        if [ -n "${MARIA_HOST}" ] ; then maria_host=${MARIA_HOST} ; fi ;
+        transform_file_var DB_USER
+        if [ -n "${DB_USER}" ] ; then maria_user=${DB_USER} ; fi ;
+        transform_file_var MYSQL_USER
+        if [ -n "${MYSQL_USER}" ] ; then maria_user=${MYSQL_USER} ; fi ;
+        transform_file_var MARIA_USER
+        if [ -n "${MARIA_USER}" ] ; then maria_user=${MARIA_USER} ; fi ;
+        transform_file_var DB_PASS
+        if [ -n "${DB_PASS}" ] ; then maria_pass=${DB_PASS} ; fi ;
+        transform_file_var MYSQL_PASS
+        if [ -n "${MYSQL_PASS}" ] ; then maria_pass=${MYSQL_PASS} ; fi ;
+        transform_file_var MARIA_PASS
+        if [ -n "${MARIA_PASS}" ] ; then maria_pass=${MARIA_PASS} ; fi ;
+        transform_file_var DB_NAME
+        if [ -n "${DB_NAME}" ] ; then maria_name=${DB_NAME} ; fi ;
+        transform_file_var MYSQL_NAME
+        if [ -n "${MYSQL_NAME}" ] ; then maria_name=${MYSQL_NAME} ; fi ;
+        transform_file_var MARIA_NAME
+        if [ -n "${MARIA_NAME}" ] ; then maria_name=${MARIA_NAME} ; fi ;
+        if [ -z "${maria_host}" ] ; then
+          print_error "No MariaDB Database Host Entered! - Set '\$DB_HOST' or '\$MARIA_HOST'"
+          exit 1
+        fi
+        if [ -z "${maria_name}" ] ; then
+          print_error "No MariaDB Database Name Entered! - Set '\$DB_NAME' or '\$MARIA_NAME'"
+          exit 1
+        fi
+        if [ -z "${maria_user}" ] ; then
+          print_error "No MariaDB Database USER Entered! - Set '\$DB_USER' or '\$MARIA_USER'"
+          exit 1
+        fi
+        if [ -z "${maria_pass}" ] ; then
+          print_error "No MariaDB Database Pass Entered! - Set '\$DB_PASS' or '\$MARIA_PASS'"
+          exit 1
+        fi
+      ;;
+      "pgsql" | "psql" | "postgres" | "postgresql" )
+        print_debug "Checking Postgres DB Parameters"
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then postgres_host=${DB_HOST} ; fi ;
+        transform_file_var POSTGRES_HOST
+        if [ -n "${POSTGRES_HOST}" ] ; then postgres_host=${POSTGRES_HOST} ; fi ;
+        transform_file_var DB_USER
+        if [ -n "${DB_USER}" ] ; then postgres_user=${DB_USER} ; fi ;
+        transform_file_var POSTGRES_USER
+        if [ -n "${POSTGRES_USER}" ] ; then postgres_user=${POSTGRES_USER} ; fi ;
+        transform_file_var DB_PASS
+        if [ -n "${DB_PASS}" ] ; then postgres_pass=${DB_PASS} ; fi ;
+        transform_file_var PGPASSWORD
+        if [ -n "${PGPASSWORD}" ] ; then postgres_pass=${PGPASSWORD} ; fi ;
+        transform_file_var DB_NAME
+        if [ -n "${DB_NAME}" ] ; then postgres_name=${DB_NAME} ; fi ;
+        transform_file_var POSTGRES_NAME
+        if [ -n "${POSTGRES_NAME}" ] ; then postgres_name=${POSTGRES_NAME} ; fi ;
+        if [ -z "${postgres_host}" ] ; then
+          print_error "No PostgreSQL Database Host Entered! - Set '\$DB_HOST' or '\$POSTGRES_HOST'"
+          exit 1
+        fi
+        if [ -z "${postgres_name}" ] ; then
+          print_error "No PostgreSQL Database Name Entered! - Set '\$DB_NAME' or '\$POSTGRES_NAME'"
+          exit 1
+        fi
+        if [ -z "${postgres_user}" ] ; then
+          print_error "No PostgreSQL Database USER Entered! - Set '\$DB_USER' or '\$POSTGRES_USER'"
+          exit 1
+        fi
+        if [ -z "${postgres_pass}" ] ; then
+          print_error "No PostgreSQL Database Pass Entered! - Set '\$DB_PASS' or '\$POSTGRES_PASS'"
+          exit 1
+        fi
+      ;;
+      "rabbit" | "rabbitmq" )
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then rabbit_host=${DB_HOST} ; fi ;
+        transform_file_var RABBIT_HOST
+        if [ -n "${RABBIT_HOST}" ] ; then rabbit_host=${RABBIT_HOST} ; fi ;
+        transform_file_var RABBITMQ_HOST
+        if [ -n "${RABBITMQ_HOST}" ] ; then rabbit_host=${RABBITMQ_HOST} ; fi ;
+        if [ -z "${rabbit_host}" ] ; then
+          print_error "No RabbitMQ Database Host Entered! - Set '\$DB_HOST' or '\$RABBIT_HOST'"
+          exit 1
+        fi
+      ;;
+      "redis" )
+        print_debug "Checking Redis DB Parameters"
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then redis_host=${DB_HOST} ; fi ;
+        transform_file_var REDIS_HOST
+        if [ -n "${REDIS_HOST}" ] ; then redis_host=${REDIS_HOST} ; fi ;
+        if [ -z "${redis_host}" ] ; then
+          print_error "No Redis Database Host Entered! - Set '\$DB_HOST' or '\$REDIS_HOST'"
+          exit 1
+        fi
+      ;;
+      "rethink" )
+        print_debug "Checking RethinkDB DB Parameters"
+        transform_file_var DB_HOST
+        if [ -n "${DB_HOST}" ] ; then rethink_host=${DB_HOST} ; fi ;
+        transform_file_var RETHINK_HOST
+        if [ -n "${RETHINK_HOST}" ] ; then rethink_host=${RETHINK_HOST} ; fi ;
+        if [ -z "${rethink_host}" ] ; then
+          print_error "No Rethink Database Host Entered! - Set '\$DB_HOST' or '\$RETHINK_HOST'"
+          exit 1
+        fi
+      ;;
+    esac
+    output_on
+  else
+    # Legacy mode - requires all standard database variables
+    print_debug "Using Legacy db_ready command - please upgrade"
+    transform_file_var DB_HOST
+    if [ -z "${DB_HOST}" ]; then
+      print_error "No Database Host Entered! - Set '\$DB_HOST'"
+      exit 1
+    fi
+
+    transform_file_var DB_NAME
+    if [ -z "${DB_NAME}" ]; then
+      print_error "No Database Name Entered! - Set '\$DB_NAME'"
+      exit 1
+    fi
+
+    transform_file_var DB_USER
+    if [ -z "${DB_USER}" ]; then
+      print_error "No Database User Entered! - Set '\$DB_USER'"
+      exit 1
+    fi
+
+    transform_file_var DB_PASS
+    if [ -z "${DB_PASS}" ]; then
+      print_error "No Database Password Entered! - Set '\$DB_PASS'"
+      exit 1
+    fi
+    output_on
+  fi
+}
+
+#-----------------------------------------------------------------------------
+# PRIVILEGE MANAGEMENT FUNCTIONS
+#-----------------------------------------------------------------------------
+# Grant doas privileges to a user (Alpine/OpenBSD style)
+grant_doas() {
+  output_off
+  if [ -n "$1" ] ; then
+    print_debug "Adding Doas privileges to '$1'"
+    if [ -n "$2" ] ; then
+      print_debug "Adding doas privileges to '$1' for '${doas_command}' command"
+      doas_command="cmd $2"
+    else
+      doas_command=""
+    fi
+
+    echo "permit nopass $1 ${doas_command} as root" >> /etc/doas.conf
+    chown root:root /etc/doas.conf
+    chmod 0400 -R /etc/doas.conf
+  fi
+  output_on
+}
+
+# Grant sudo privileges to a user
+grant_sudo() {
+  output_off
+  if [ -n "$1" ] ; then
+    if [ -n "$2" ] ; then
+      sudo_command="$2"
+    else
+      sudo_command="ALL"
+    fi
+    print_debug "Adding Sudo privileges to '$1' for '${sudo_command}' command"
+    echo "%$1 ALL=(ALL) NOPASSWD:${sudo_command}" >> /etc/sudoers
+  fi
+  output_on
+}
+
+#-----------------------------------------------------------------------------
+# MONITORING INTEGRATION FUNCTIONS
+#-----------------------------------------------------------------------------
+# Create Zabbix monitoring configuration for a service
+create_zabbix() {
+  if [ -n "$1" ] ; then
+    if [ -n "$2" ] ; then
+      autoregister=$2
+    else
+      autoregister=$1
+    fi
+    print_debug "Adding Zabbix Auto Register configuration for '$1'"
+    if var_true "${CONTAINER_ENABLE_MONITORING}" && [ "${CONTAINER_MONITORING_BACKEND,,}" = "zabbix" ]; then
+      source /assets/defaults/03-monitoring
+      cat <<EOF > "${ZABBIX_CONFIG_PATH}"/"${ZABBIX_CONFIG_FILE}.d"/focela_"$1".conf
+# Zabbix $1 Configuration - Automatically Generated
+# Autoregister=$autoregister
+EOF
+    fi
+  fi
+}
+
+#-----------------------------------------------------------------------------
+# PACKAGE MANAGEMENT ABSTRACTION
+#-----------------------------------------------------------------------------
+# Universal package management (Alpine apk / Debian apt)
+package() {
+  # Clean package caches and temporary files
+  cleanup() {
+    case "${distro}" in
+      "alpine" )
+        rm -rf /root/.gitconfig
+        rm -rf /var/cache/apk/*
+      ;;
+      "debian" | "ubuntu" )
+        apt-get clean -y
+        rm -rf /root/.gitconfig
+        rm -rf /var/lib/apt/lists/*
+      ;;
+    esac
+  }
+
+  # Install packages
+  install() {
+    # Check if packages were provided
+    if [ $# -eq 0 ]; then
+      print_error "No packages specified for installation"
+      return 1
+    fi
+    
+    case "${distro}" in
+      "alpine" )
+        # Handle dependency-only packages (starting with .)
+        local dependencies=""
+        if [[ "${1}" =~ ^\..* ]] ; then
+          dependencies="-t"
+        fi
+        # Only add dependencies flag if it's set, otherwise just install packages
+        if [ -n "${dependencies}" ]; then
+          apk add "${dependencies}" "$@"
+        else
+          apk add "$@"
+        fi
+      ;;
+      "debian" | "ubuntu" )
+        # Skip dependency-only packages for apt (not supported)
+        if [[ "${1}" =~ ^\..* ]] ; then
+          shift
+        fi
+        apt-get install -y --no-install-recommends "$@"
+      ;;
+    esac
+  }
+
+  # Remove packages
+  remove() {
+    # Check if packages were provided
+    if [ $# -eq 0 ]; then
+      print_error "No packages specified for removal"
+      return 1
+    fi
+    
+    case "${distro}" in
+      "alpine" )
+        apk del "$@"
+      ;;
+      "debian" | "ubuntu" )
+        local packages="$@"
+        if [[ "${packages}" =~ ^\..* ]] ; then
+          # Filter out dependency-only packages (starting with dot) to only remove actual packages
+          local filtered_packages=""
+          for pkg in $packages; do
+            if [[ ! "$pkg" =~ ^\. ]]; then
+              filtered_packages="${filtered_packages} ${pkg}"
+            fi
+          done
+          packages="${filtered_packages# }"
+        fi
+        apt-get purge -y "${packages}"
+        apt-get autoremove -y
+      ;;
+    esac
+  }
+
+  # Update package lists
+  update() {
+    case "${distro}" in
+      "alpine" )
+        apk update
+      ;;
+      "debian" | "ubuntu" )
+        apt-get update
+      ;;
+    esac
+  }
+
+  # Upgrade all packages
+  upgrade() {
+    case "${distro}" in
+      "alpine" )
+        apk upgrade
+      ;;
+      "debian" | "ubuntu" )
+        apt-get upgrade -y
+      ;;
+    esac
+  }
+
+  output_off
+  local distro
+  distro=$(cat /etc/os-release |grep ^ID= | cut -d = -f2 | tr -d '"')
+  local action="${1}"
+  shift
+  local arguments=("$@")
+
+  case "${action}" in
+    add | install )
+      action=install
+      "${action}" "${arguments[@]}"
+    ;;
+    delete | remove | uninstall )
+      action=remove
+      "${action}" "${arguments[@]}"
+    ;;
+    * )
+      "${action}" "${arguments[@]}"
+    ;;
+  esac
+  output_on
+}
+
+#-----------------------------------------------------------------------------
+# MAIN EXECUTION - DEBUG MODE CONFIGURATION
+#-----------------------------------------------------------------------------
+# Configure debug mode based on DEBUG_MODE environment variable
+case "${DEBUG_MODE}" in
+  "TRUE" | "true" | "YES" | "yes" | "ON" | "on" )
+    # Global debug mode - enables debug for all scripts and sets log level
+    CONTAINER_LOG_LEVEL="DEBUG"
+    set -x
+  ;;
+  "FALSE" | "false" | "NO" | "no" | "OFF" | "off" )
+    # Debug mode explicitly disabled - no debug output
+    :
+  ;;
+  * )
+    # Script-specific debug mode - enables debug only for matching script names
+    if [ "$(dirname "$0")" = "/var/run/s6/etc/cont-init.d" ] || [ "$(dirname "$0")" = "/etc/cont-init.d" ]; then
+      if [ "${DEBUG_MODE}" = "$(basename "$0")" ] ; then
+        print_notice "Enabling Debug mode for $(basename "$0") scripts"
+        set -x
+      fi
+    fi
+    # Check current working directory for service-specific debug
+    if [ "${DEBUG_MODE}" = "$(basename "$PWD")" ] ; then
+      print_notice "Enabling Debug mode for $(basename "$PWD") scripts"
+      set -x
+    fi
+  ;;
+esac
