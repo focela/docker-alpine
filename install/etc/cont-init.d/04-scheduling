@@ -65,7 +65,7 @@ else
       #-----------------------------------------------------------------------------
       # Process cron configurations from environment variables
       cronenv=$(mktemp)
-      set -o posix; set -f ; set | grep -E '^CRON_'| sed "s|CRON_||g" > ${cronenv}
+      set -o posix; set -f ; set | grep -E '^CRON_'| sed "s|CRON_||g" > "${cronenv}"
       sed -i "/^PERIOD/d" "${cronenv}"
       
       # Process each cron entry from environment variables
@@ -91,10 +91,10 @@ EOF
 ${schedule_value}
 EOF
         fi
-      done < ${cronenv}
+      done < "${cronenv}"
       
       # Clean up temporary files and variables
-      rm -rf $cronenv
+      rm -rf "${cronenv}"
       set +f
       unset cronenv schedules cron_entry schedule_value schedule_title
       unset "${!CRON_@}"
@@ -107,7 +107,7 @@ EOF
         if [ "$d" != "/assets/defaults/00-container" ] ; then
           # shellcheck source=/assets/defaults/
           output_off
-          source $d
+          source "$d"
           output_on
           
           # Extract cron configurations from sourced defaults
@@ -123,7 +123,7 @@ EOF
             
             # Only add if schedule doesn't already exist
             if [ ! -f "${CONTAINER_SCHEDULING_LOCATION}/${schedule_title,,}" ] ; then
-              print_debug "Adding $schedule_title with value $schedule_value to crontab"
+              print_debug "Adding ${schedule_title} with value ${schedule_value} to crontab"
               cat <<EOF > "${CONTAINER_SCHEDULING_LOCATION}/${schedule_title,,}"
 # Scheduled execution of command taken from default file: '${d}'
 # Entered Value: ${schedule_value}
@@ -137,7 +137,7 @@ EOF
           done < "${cronenv}"
           
           # Clean up temporary files and variables
-          rm -rf $cronenv
+          rm -rf "${cronenv}"
           set +f
           unset cronenv schedules cron_entry schedule_value schedule_title
           unset "${!CRON_@}"

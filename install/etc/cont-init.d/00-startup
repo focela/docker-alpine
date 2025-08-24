@@ -188,9 +188,9 @@ zcat () {
   if [ -f "\$@" ] ; then
     case "\$@" in
       *.zst* )      $(which zstdcat) "\$@" ;;
-      *.bz*)       $(which zcat) "\$@" ;;
+      *.bz*)       $(which bzcat) "\$@" ;;
       *.gz*)       $(which zcat) "\$@" ;;
-      *.xz)        $(which zcat) "\$@" ;;
+      *.xz)        $(which xzcat) "\$@" ;;
     esac
   else
     echo "'\$@' is not a valid file!"

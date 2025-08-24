@@ -63,13 +63,12 @@ if var_true "${CONTAINER_ENABLE_FIREWALL}" ; then
     
     # Create temporary file to store firewall rules
     firewallenv=$(mktemp)
-    printenv | sort | grep '^FIREWALL_RULE_[0-9][0-9]*' | sed "s|FIREWALL_RULE_||g" > ${firewallenv}
-    cat ${firewallenv}
+    printenv | sort | grep '^FIREWALL_RULE_[0-9][0-9]*' | sed "s|FIREWALL_RULE_||g" > "${firewallenv}"
     
     # Process each firewall rule entry
     while IFS= read -r firewall_entry; do
-      rule_number="$(echo ${firewall_entry} | cut -d = -f1 )"
-      rule_value="$(echo ${firewall_entry} | cut -d = -f2 )"
+      rule_number="$(echo "${firewall_entry}" | cut -d = -f1 )"
+      rule_value="$(echo "${firewall_entry}" | cut -d = -f2 )"
       print_debug "Adding Rule Number: ${rule_number} with to be parsed by ${CONTAINER_FIREWALL_BACKEND}"
       silent "${firewall_command}" ${rule_value}
     done < "${firewallenv}"
@@ -78,7 +77,7 @@ if var_true "${CONTAINER_ENABLE_FIREWALL}" ; then
     rm -rf "${firewallenv}"
     set +f
     unset rule_number rule_value
-    unset "${!FIREWALL_RULE_RULE_@}"
+    unset "${!FIREWALL_RULE_@}"
   fi
 
   #-----------------------------------------------------------------------------
