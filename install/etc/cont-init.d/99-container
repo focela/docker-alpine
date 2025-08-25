@@ -46,7 +46,8 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   # COMPLETION STATUS DETECTION
   #-----------------------------------------------------------------------------
   # Count completed initialization scripts from temporary files
-  init_complete=$(find /tmp/.container/*-init -maxdepth 1 -type f | wc -l)
+  shopt -s nullglob
+  init_complete=$(find /tmp/.container/*-init -maxdepth 1 -type f 2>/dev/null | wc -l)
   
   # Extract names of completed initialization scripts
   declare -a init_complete_name
@@ -55,6 +56,8 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
     script_name=$(basename "$f" | sed 's/-init$//')
     init_complete_name+=("$script_name")
   done
+  # Restore default glob behavior
+  shopt -u nullglob
 
   #-----------------------------------------------------------------------------
   # UNINITIALIZED SCRIPT IDENTIFICATION
