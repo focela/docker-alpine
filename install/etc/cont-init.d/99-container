@@ -67,12 +67,15 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   for script_name in "${files_init_name[@]}"; do
     skip=
     for completion_name in "${init_complete_name[@]}"; do
-      # Compare script names directly (both should be script names, not process names)
-      [[ "$script_name" == "$completion_name" ]] && { skip=1; break; }
+      # Remove numeric prefix from script names for proper matching
+      clean_script_name=$(echo "$script_name" | sed 's/^[0-9]*-//')
+      if [[ "$clean_script_name" == "$completion_name" ]]; then
+        skip=1
+        break
+      fi
     done
     [[ -n $skip ]] || uninitialized_scripts+=("$script_name")
   done
-  declare uninitialized_scripts
 
   #-----------------------------------------------------------------------------
   # INITIALIZATION COMPLETION VALIDATION
