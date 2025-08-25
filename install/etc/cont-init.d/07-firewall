@@ -73,8 +73,8 @@ if var_true "${CONTAINER_ENABLE_FIREWALL}" ; then
     
     # Process each firewall rule entry
     while IFS= read -r firewall_entry; do
-      rule_number="$(echo "${firewall_entry}" | cut -d = -f1 )"
-      rule_value="$(echo "${firewall_entry}" | cut -d = -f2 )"
+      rule_number="${firewall_entry%%=*}"
+      rule_value="${firewall_entry#*=}"
       print_debug "Adding Rule Number: ${rule_number} with to be parsed by ${CONTAINER_FIREWALL_BACKEND}"
       silent "${firewall_command}" "${rule_value}"
     done < "${firewallenv}"

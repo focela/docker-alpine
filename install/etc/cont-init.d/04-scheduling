@@ -70,8 +70,9 @@ else
       
       # Process each cron entry from environment variables
       while IFS= read -r cron_entry; do
-        schedule_title="$(echo "${cron_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]' )"
-        schedule_value="$(echo "${cron_entry}" | cut -d = -f2 )"
+        schedule_title="${cron_entry%%=*}"
+        schedule_title="${schedule_title,,}"
+        schedule_value="${cron_entry#*=}"
         # Strip quotes from value (both single and double quotes)
         schedule_value="$(echo "${schedule_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
         
@@ -118,8 +119,9 @@ EOF
           
           # Process each cron entry from default files
           while IFS= read -r cron_entry; do
-            schedule_title="$(echo "${cron_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]')"
-            schedule_value="$(echo "${cron_entry}" | cut -d = -f2 )"
+            schedule_title="${cron_entry%%=*}"
+            schedule_title="${schedule_title,,}"
+            schedule_value="${cron_entry#*=}"
             # Strip quotes from value (both single and double quotes)
             schedule_value="$(echo "${schedule_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
             

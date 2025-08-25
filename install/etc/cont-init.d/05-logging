@@ -259,8 +259,9 @@ EOF
             
             # Process each log shipping entry from environment variables
             while IFS= read -r logship_entry; do
-              logship_title="$(echo "${logship_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]' )"
-              logship_value="$(echo "${logship_entry}" | cut -d = -f2 )"
+              logship_title="${logship_entry%%=*}"
+              logship_title="${logship_title,,}"
+              logship_value="${logship_entry#*=}"
               # Strip quotes from value
               logship_value="$(echo "${logship_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
               
@@ -338,8 +339,9 @@ EOF
                 
                 # Process each log shipping entry from default files
                 while IFS= read -r logship_entry; do
-                  logship_title="$(echo "${logship_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]')"
-                  logship_value="$(echo "${logship_entry}" | cut -d = -f2 )"
+                  logship_title="${logship_entry%%=*}"
+                  logship_title="${logship_title,,}"
+                  logship_value="${logship_entry#*=}"
                   # Strip quotes from value
                   logship_value="$(echo "${logship_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
 
