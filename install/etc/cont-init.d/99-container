@@ -47,7 +47,7 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   #-----------------------------------------------------------------------------
   # Count completed initialization scripts from temporary files
   shopt -s nullglob
-  init_complete=$(find /tmp/.container/*-init -maxdepth 1 -type f 2>/dev/null | wc -l)
+  init_complete=$(find /tmp/.container -maxdepth 1 -name "*-init" -type f 2>/dev/null | wc -l)
   
   # Extract names of completed initialization scripts
   declare -a init_complete_name
@@ -64,12 +64,13 @@ if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
   #-----------------------------------------------------------------------------
   # Identify scripts that did not complete initialization
   uninitialized_scripts=()
-  for i in "${files_init_name[@]}"; do
+  for script_name in "${files_init_name[@]}"; do
     skip=
-    for j in "${init_complete_name[@]}"; do
-      [[ $i == "$j" ]] && { skip=1; break; }
+    for completion_name in "${init_complete_name[@]}"; do
+      # Compare script names directly (both should be script names, not process names)
+      [[ "$script_name" == "$completion_name" ]] && { skip=1; break; }
     done
-    [[ -n $skip ]] || uninitialized_scripts+=("$i")
+    [[ -n $skip ]] || uninitialized_scripts+=("$script_name")
   done
   declare uninitialized_scripts
 
