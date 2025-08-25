@@ -1,0 +1,217 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Finalization and Service Startup Script
+#
+# Purpose: Performs final container initialization checks, starts available services,
+#          and executes post-initialization scripts and commands
+# Context: Runs as the final script during container initialization phase via s6-overlay cont-init.d
+# Note: This script ensures all initialization scripts completed before starting services
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# INITIAL SETUP
+#-----------------------------------------------------------------------------
+# Source container defaults and core functions
+source /assets/defaults/00-container
+source /assets/functions/00-container
+output_off
+PROCESS_NAME="container"
+
+#-----------------------------------------------------------------------------
+# INITIALIZATION SANITY CHECK
+#-----------------------------------------------------------------------------
+# Verify all initialization scripts completed successfully if sanity check is enabled
+if var_false "${CONTAINER_SKIP_SANITY_CHECK}" ; then
+  
+  #-----------------------------------------------------------------------------
+  # INITIALIZATION SCRIPT DETECTION
+  #-----------------------------------------------------------------------------
+  # Count total initialization scripts in cont-init.d directory
+  files_init=$(find /etc/cont-init.d/ -maxdepth 1 -type f | wc -l)
+  files_init=$(( $files_init-1 ))
+  
+  # Extract names of initialization scripts
+  declare -a files_init_name
+  for f in /etc/cont-init.d/*; do
+    # Extract script name without path and exclude 99-container
+    script_name=$(basename "$f")
+    if [ "$script_name" != "99-container" ]; then
+      files_init_name+=("$script_name")
+    fi
+  done
+
+  #-----------------------------------------------------------------------------
+  # COMPLETION STATUS DETECTION
+  #-----------------------------------------------------------------------------
+  # Count completed initialization scripts from temporary files
+  shopt -s nullglob
+  init_complete=$(find /tmp/.container -maxdepth 1 -name "*-init" -type f 2>/dev/null | wc -l)
+  
+  # Extract names of completed initialization scripts
+  declare -a init_complete_name
+  for f in /tmp/.container/*-init; do
+    # Extract script name without path and -init suffix
+    script_name=$(basename "$f" | sed 's/-init$//')
+    init_complete_name+=("$script_name")
+  done
+  # Restore default glob behavior
+  shopt -u nullglob
+
+  #-----------------------------------------------------------------------------
+  # UNINITIALIZED SCRIPT IDENTIFICATION
+  #-----------------------------------------------------------------------------
+  # Identify scripts that did not complete initialization
+  uninitialized_scripts=()
+  for script_name in "${files_init_name[@]}"; do
+    skip=
+    for completion_name in "${init_complete_name[@]}"; do
+      # Remove numeric prefix from script names for proper matching
+      clean_script_name=$(echo "$script_name" | sed 's/^[0-9]*-//')
+      if [[ "$clean_script_name" == "$completion_name" ]]; then
+        skip=1
+        break
+      fi
+    done
+    [[ -n $skip ]] || uninitialized_scripts+=("$script_name")
+  done
+
+  #-----------------------------------------------------------------------------
+  # INITIALIZATION COMPLETION VALIDATION
+  #-----------------------------------------------------------------------------
+  # Check if all initialization scripts completed successfully
+  if [ $files_init != "$init_complete" ]; then
+    if [ "$init_complete" -gt "$files_init" ] ; then
+      # More completed than expected (edge case, allow to proceed)
+      :
+    else
+      # Some scripts failed to complete - halt container startup
+      if [ -n "${IMAGE_NAME}" ] ; then
+        #-----------------------------------------------------------------------------
+        # IMAGE VERSION DETECTION
+        #-----------------------------------------------------------------------------
+        # Detect image version from changelog files for error reporting
+        if [ -f "/assets/.changelogs/${IMAGE_NAME/\//_}.md" ] ; then
+          image_version=$(head -n1 /assets/.changelogs/"${IMAGE_NAME/\//_}".md | awk '{print $2}')
+        elif [ -f /assets/.changelogs/docker-"${IMAGE_NAME/\//_}".md ] ; then
+          image_version=$(head -n1 /assets/.changelogs/docker-"${IMAGE_NAME/\//_}".md | awk '{print $2}')
+        else
+          if [ -f /assets/.changelogs/focela_docker-"${IMAGE_NAME/\//_}".md ] ; then
+            image_version=$(head -n1 /assets/.changelogs/focela_docker-"${IMAGE_NAME/\//_}".md | awk '{print $2}')
+          fi
+        fi
+
+        #-----------------------------------------------------------------------------
+        # ERROR MESSAGE GENERATION
+        #-----------------------------------------------------------------------------
+        # Build informative error message with image details
+        image_string="Image: ${IMAGE_NAME}"
+
+        if [ -n "${image_version}" ] ; then
+          image_string="${image_string} | Version ${image_version} Type 'changelog' for details"
+        fi
+
+        image_string="${image_string}"
+
+        if [ -n "${IMAGE_REPO_URL}" ] ; then
+          image_url="Repository/Issues/Support: ${IMAGE_REPO_URL}"
+        fi
+      fi
+      
+      #-----------------------------------------------------------------------------
+      # ERROR DISPLAY AND CONTAINER HALT
+      #-----------------------------------------------------------------------------
+      # Display comprehensive error message and halt container
+      echo "**********************************************************************************************************************"
+      echo "**********************************************************************************************************************"
+      echo "****                                                                                                              ****"
+      echo "****       ERROR - Some initialization scripts haven't completed - All services are now halted                    ****"
+      echo "****             - The following scripts in '/etc/cont-init.d' did not pass their completion check                ****"
+      echo "****                                                                                                              ****"
+      echo "**********************************************************************************************************************"
+      echo "**********************************************************************************************************************"
+      echo ""
+      echo "${uninitialized_scripts[@]}" | tr ' ' '\n' | uniq -u
+      echo ""
+      echo "**********************************************************************************************************************"
+      echo "**********************************************************************************************************************"
+      echo "****                                                                                                              ****"
+      echo "****       This could have happened for a variety of reasons. Please make sure you have followed the README       ****"
+      echo "****       relating to this image and have proper configuration such as environment variables and volumes set     ****"
+      echo "****                                                                                                              ****"
+      echo "****       If you feel that you have encountered a bug, please submit an issue on the revision control system     ****"
+      echo "****       and provide full debug logs by setting the environment variable 'DEBUG_MODE=TRUE'                      ****"
+      echo "****                                                                                                              ****"
+      echo "**********************************************************************************************************************"
+      echo "**********************************************************************************************************************"
+      echo ""
+      echo "$image_string"
+      echo "$image_url"
+      exit 1
+    fi
+  fi
+  output_on
+fi
+
+#-----------------------------------------------------------------------------
+# SERVICE STARTUP CONFIGURATION
+#-----------------------------------------------------------------------------
+# Start available services based on initialization status
+for services in /etc/services.available/*/
+do
+  service=${services%*/}
+  if [ -f "/tmp/.container/${service##*/}-init" ]; then
+    # Check if service should be skipped based on initialization file content
+    if grep -q "DONOTSTART" "/tmp/.container/${service##*/}-init"; then
+      print_debug "Skipping '${service##*/}' service for startup routines"
+    else
+      print_debug "Getting ready to start '${service##*/}' service"
+      ln -sf "${service}" /etc/services.d
+    fi
+  else
+    # No initialization script found, start service directly
+    print_debug "No Initialization Script Found - Getting ready to start '${service##*/}' service"
+    ln -sf "${service}" /etc/services.d
+  fi
+done
+
+#-----------------------------------------------------------------------------
+# POST-INITIALIZATION SCRIPT EXECUTION
+#-----------------------------------------------------------------------------
+# Execute custom post-initialization scripts if specified
+if [ -n "${CONTAINER_POST_INIT_SCRIPT}" ] ; then
+  print_debug "Found Post Init Scripts"
+  post_scripts=$(echo "${CONTAINER_POST_INIT_SCRIPT}" | tr "," "\n")
+  for post_script in $post_scripts
+  do
+    if [ -f "${post_script}" ] ; then
+      print_debug "Executing post init script '${post_script}'"
+      chmod +x "${post_script}"
+      "${post_script}"
+    else
+      print_error "Tried to run post script '${post_script}' but it does not exist!"
+    fi
+  done
+fi
+
+#-----------------------------------------------------------------------------
+# POST-INITIALIZATION COMMAND EXECUTION
+#-----------------------------------------------------------------------------
+# Execute custom post-initialization commands if specified
+if [ -n "${CONTAINER_POST_INIT_COMMAND}" ] ; then
+  print_debug "Found Post Init Command"
+  post_commands=$(echo "${CONTAINER_POST_INIT_COMMAND}" | tr "," "\n")
+  for post_command in $post_commands
+  do
+    print_debug "Executing post init command '${post_command}'"
+    eval "${post_command}"
+  done
+fi
+
+#-----------------------------------------------------------------------------
+# FINAL INITIALIZATION
+#-----------------------------------------------------------------------------
+# Complete container initialization sequence
+liftoff
+output_on
