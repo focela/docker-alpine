@@ -261,7 +261,7 @@ EOF
             while IFS= read -r logship_entry; do
               logship_title="$(echo "${logship_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]' )"
               logship_value="$(echo "${logship_entry}" | cut -d = -f2 )"
-              # Safely remove surrounding quotes if they exist
+              # Strip quotes from value
               logship_value="$(echo "${logship_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
               
               if var_false "${logship_value}" ; then
@@ -340,7 +340,7 @@ EOF
                 while IFS= read -r logship_entry; do
                   logship_title="$(echo "${logship_entry}" | cut -d = -f1 | tr '[:upper:]' '[:lower:]')"
                   logship_value="$(echo "${logship_entry}" | cut -d = -f2 )"
-                  # Safely remove surrounding quotes if they exist
+                  # Strip quotes from value
                   logship_value="$(echo "${logship_value}" | sed 's/^["'\'']*\(.*\)["'\'']*$/\1/')"
 
                   # Configure tail database if enabled

@@ -52,6 +52,7 @@ if var_true "${CONTAINER_ENABLE_PERMISSIONS}" ; then
   for upair in $unames; do
     uname=$(echo "${upair}" | cut -d = -f 1)
     uid=$(echo "${upair}" | cut -d = -f 2)
+    _userexists=false
     
     # Check if user exists in /etc/passwd
     if grep -e "^${uname}" /etc/passwd > /dev/null; then
