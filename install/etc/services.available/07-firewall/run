@@ -1,0 +1,65 @@
+#!/command/with-contenv bash
+#-----------------------------------------------------------------------------
+# Container Firewall Service Runtime Script
+#
+# Purpose: Manages the runtime execution of firewall and intrusion prevention
+#          services (fail2ban) with configurable logging and startup delays
+# Context: Runs as s6-overlay service after container initialization completes
+# Note: This script handles fail2ban service startup with dynamic configuration
+#-----------------------------------------------------------------------------
+
+
+
+#-----------------------------------------------------------------------------
+# SERVICE INITIALIZATION
+#-----------------------------------------------------------------------------
+# Source container core functions and prepare firewall service
+source /assets/functions/00-container
+output_off
+PROCESS_NAME="firewall"
+prepare_service defaults single
+check_container_initialized
+check_service_initialized init
+
+# Mark service initialization as complete
+liftoff
+
+#-----------------------------------------------------------------------------
+# FIREWALL BACKEND EXECUTION
+#-----------------------------------------------------------------------------
+# Execute firewall backend based on configuration
+case "${CONTAINER_FIREWALL_BACKEND,,}" in
+  "iptables" | "fail2ban" )
+    #-----------------------------------------------------------------------------
+    # FAIL2BAN STARTUP DELAY
+    #-----------------------------------------------------------------------------
+    # Wait for logs and validate startup delay
+    if [ -z "${FAIL2BAN_STARTUP_DELAY}" ] || ! [[ "${FAIL2BAN_STARTUP_DELAY}" =~ ^[0-9]+$ ]]; then
+      print_debug "Invalid FAIL2BAN_STARTUP_DELAY value '${FAIL2BAN_STARTUP_DELAY}', using default 30 seconds"
+      FAIL2BAN_STARTUP_DELAY=30
+    fi
+    
+    print_debug "Sleeping for '${FAIL2BAN_STARTUP_DELAY}' seconds before starting Fail2ban to make sure logs are populated"
+    sleep "${FAIL2BAN_STARTUP_DELAY}"
+
+    #-----------------------------------------------------------------------------
+    # FAIL2BAN SERVICE STARTUP
+    #-----------------------------------------------------------------------------
+    # Start fail2ban server with appropriate logging configuration
+    print_start "Starting Fail2ban"
+    
+    if [ "${FAIL2BAN_LOG_TYPE,,}" = "file" ] ; then
+      # Enable output for file-based logging
+      silent exec fail2ban-server -f
+    else
+      # Enable output for other logging types
+      output_on
+      exec fail2ban-server -f
+    fi
+  ;;
+  
+  * )
+    print_error "Unknown Firewall Backend"
+    exit 1
+  ;;
+esac
