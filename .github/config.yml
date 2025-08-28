@@ -1,0 +1,14 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security Policy
+    url: https://github.com/focela/docker-alpine/blob/main/SECURITY.md
+    about: Please report security vulnerabilities here.
+  - name: Contributing Guide
+    url: https://github.com/focela/docker-alpine/blob/main/CONTRIBUTING.md
+    about: How to contribute to this project.
+  - name: Community Discussions
+    url: https://github.com/focela/docker-alpine/discussions
+    about: Join community discussions and get help.
+  - name: Code of Conduct
+    url: https://github.com/focela/docker-alpine/blob/main/CODE_OF_CONDUCT.md
+    about: Our community standards and behavior guidelines.
