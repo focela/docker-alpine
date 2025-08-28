@@ -1,0 +1,224 @@
+# -----------------------------------------------------------------------------
+# Automated Multi-Architecture Alpine Image Build Workflow
+# -----------------------------------------------------------------------------
+# Purpose: Scheduled and push-triggered workflow to build Docker images for
+#          multiple Alpine Linux versions and architectures
+# Registries: Docker Hub and GitHub Container Registry (GHCR)
+# Platforms: linux/amd64, linux/arm64, linux/arm/v7 (version-dependent)
+# -----------------------------------------------------------------------------
+
+name: "Automated Multi-Architecture Image Build"
+
+on:
+  schedule:
+    - cron: "1 23 * * 5"
+  push:
+    paths:
+      - '**'
+      - '!README.md'
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DOCKER_BUILDKIT: 1
+
+jobs:
+  build:
+    name: "Build Alpine ${{ matrix.distro_variant }}"
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - distro_variant: "edge"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.21"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.20"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.19"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.18"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.17"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.16"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.15"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.14"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.13"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.12"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.11"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.10"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.9"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.8"
+            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
+          - distro_variant: "3.7"
+            platforms: "linux/amd64"
+          - distro_variant: "3.6"
+            platforms: "linux/amd64,linux/arm64"
+          - distro_variant: "3.5"
+            platforms: "linux/amd64"
+
+    env:
+      DISTRO_VARIANT: ${{ matrix.distro_variant }}
+      build_file: Dockerfile
+
+    steps:
+      - name: "📥 Checkout Repository"
+        uses: actions/checkout@v4
+
+      - name: "🔧 Prepare Build Environment"
+        id: prep
+        shell: bash
+        run: |
+          # EXACT ORIGINAL LOGIC - DO NOT MODIFY
+          # This preserves the original branching and tagging behavior
+          if [[ "${GITHUB_REF}" == refs/heads/* ]]; then
+            if [[ "${GITHUB_REF}" == refs/heads/*/* ]] ; then
+              git_branch="${GITHUB_REPOSITORY/docker-/}:$(echo $GITHUB_REF | sed "s|refs/heads/||g" | sed "s|/|-|g")"
+            else
+              git_branch=${GITHUB_REF#refs/heads/}
+            fi
+
+            case "${git_branch}" in
+              "main" | "master" )
+                if [ "${{ vars.LATEST }}" = "TRUE" ] || [ "${{ vars.LATEST }}" = "${DISTRO_VARIANT}" ]; then
+                  image_latest=",${GITHUB_REPOSITORY}:latest"
+                fi
+                branch_tag="${GITHUB_REPOSITORY}:${DISTRO_VARIANT},${GITHUB_REPOSITORY}:${DISTRO_VARIANT}-latest${image_latest}"
+                ;;
+              "develop" )
+                branch_tag="${GITHUB_REPOSITORY}:develop"
+                ;;
+            esac
+          fi
+
+          # Generate tag-based image names for releases
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            git_tag="${GITHUB_REPOSITORY}:${DISTRO_VARIANT}-$(echo ${GITHUB_REF} | sed 's|refs/tags/||g')"
+          fi
+
+          # Combine branch and tag-based tags
+          if [ -n "${branch_tag}" ] && [ -n "${git_tag}" ]; then
+            image_tags=${branch_tag},${git_tag}
+          else
+            image_tags="${branch_tag}${git_tag}"
+          fi
+
+          # Generate registry-specific image names
+          echo "dockerhub_repo=${GITHUB_REPOSITORY/docker-/}" >> $GITHUB_ENV
+          
+          if [[ -n "${image_tags}" ]]; then
+            dockerhub_images=$(echo "${image_tags}" | sed "s|${GITHUB_REPOSITORY}|docker.io/${GITHUB_REPOSITORY/docker-/}|g")
+            ghcr_images=$(echo "${image_tags}" | sed "s|${GITHUB_REPOSITORY}|ghcr.io/${GITHUB_REPOSITORY}|g")
+            echo "container_images=${dockerhub_images},${ghcr_images}" >> $GITHUB_OUTPUT
+          else
+            echo "container_images=" >> $GITHUB_OUTPUT
+          fi
+
+      - name: "🏷️ Inject Metadata Labels"
+        id: label
+        shell: bash
+        run: |
+          # EXACT ORIGINAL LOGIC - DO NOT MODIFY
+          # This preserves the original label injection behavior
+          image_name=${GITHUB_REPOSITORY/docker-/}
+          if [ -f "${{ env.build_file }}" ] ; then
+            # Inject Git repository metadata
+            sed -i "/FROM .*/a LABEL focela.${image_name}.git_repository=\"https://github.com/${GITHUB_REPOSITORY}\"" ${{ env.build_file }}
+            sed -i "/FROM .*/a LABEL focela.${image_name}.git_commit=\"${GITHUB_SHA}\"" ${{ env.build_file }}
+            sed -i "/FROM .*/a LABEL focela.${image_name}.git_committed_by=\"${GITHUB_ACTOR}\"" ${{ env.build_file }}
+            sed -i "/FROM .*/a LABEL focela.${image_name}.image_build_date=\"$(date +'%Y-%m-%d %H:%M:%S')\"" ${{ env.build_file }}
+            sed -i "/FROM .*/a LABEL org.opencontainers.image.source https://github.com/${GITHUB_REPOSITORY}"  ${{ env.build_file }}
+
+            # Add changelog version if available
+            if [ -f "CHANGELOG.md" ] ; then
+              sed -i "/FROM .*/a LABEL focela.${image_name}.git_changelog_version=\"$(sed -n '7p' ./CHANGELOG.md | awk '{print $2}' | sed 's/\[//;s/\]//')\"" ${{ env.build_file }}
+              mkdir -p install/assets/.changelogs ; cp CHANGELOG.md install/assets/.changelogs/${GITHUB_REPOSITORY/\//_}.md
+            fi
+
+            # Add Git reference labels based on trigger type
+            if [[ $GITHUB_REF == refs/tags/* ]]; then
+              sed -i "/FROM .*/a LABEL focela.${image_name}.git_tag=\"${GITHUB_REF#refs/tags/v}\"" ${{ env.build_file }}
+            fi
+
+            if [[ $GITHUB_REF == refs/heads/* ]]; then
+              sed -i "/FROM .*/a LABEL focela.${image_name}.git_branch=\"${GITHUB_REF#refs/heads/}\"" ${{ env.build_file }}
+            fi
+          fi
+
+      - name: "🔨 Setup Docker Buildx"
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: "🏭 Setup QEMU Emulation"
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm,arm64
+
+      - name: "🔐 Login to Docker Hub"
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: "🔐 Login to GitHub Container Registry"
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: "🚀 Build and Push Image"
+        if: github.event_name != 'pull_request' && steps.prep.outputs.container_images != ''
+        uses: docker/build-push-action@v5
+        with:
+          builder: ${{ steps.buildx.outputs.name }}
+          context: .
+          file: ./${{ env.build_file }}
+          platforms: ${{ matrix.platforms }}
+          push: true
+          tags: ${{ steps.prep.outputs.container_images }}
+          build-args: |
+            ALPINE_VERSION=${{ env.DISTRO_VARIANT }}
+          cache-from: type=gha,scope=${{ matrix.distro_variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.distro_variant }}
+
+      - name: "📊 Build Summary"
+        if: always()
+        shell: bash
+        run: |
+          echo "## 🐳 Automated Alpine ${{ matrix.distro_variant }} Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Alpine Version** | \`${{ matrix.distro_variant }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Platforms** | \`${{ matrix.platforms }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Repository** | \`${GITHUB_REPOSITORY/docker-/}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Git Commit** | \`${GITHUB_SHA:0:8}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Triggered By** | \`${{ github.actor }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Trigger Type** | Scheduled/Push Event |" >> $GITHUB_STEP_SUMMARY
+          
+          if [[ -n "${{ steps.prep.outputs.container_images }}" ]]; then
+            echo "| **Generated Tags** | \`${{ steps.prep.outputs.container_images }}\` |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "✅ **Automated build completed successfully!**" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| **Generated Tags** | _None (skipped)_ |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⏭️ **Automated build skipped (no tags generated)**" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,11 @@
+github: [focela]
+
+custom:
+  - link_type: website
+    url: https://focela.com/sponsor
+    platform: Focela Labs
+    about: Sponsor development and get priority support
+  - link_type: website
+    url: https://focela.com/enterprise
+    platform: Enterprise Support
+    about: Enterprise-grade support and consulting services
