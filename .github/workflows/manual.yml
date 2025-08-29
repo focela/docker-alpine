@@ -30,8 +30,6 @@ jobs:
       max-parallel: 3
       matrix:
         include:
-          - distro_variant: "edge"
-            platforms: "linux/amd64,linux/arm64,linux/arm/v7"
           - distro_variant: "3.21"
             platforms: "linux/amd64,linux/arm64,linux/arm/v7"
           - distro_variant: "3.20"
@@ -159,7 +157,7 @@ jobs:
         id: buildx
         uses: docker/setup-buildx-action@v3
         with:
-          driver: docker
+          driver: docker-container
           buildkitd-flags: --allow-insecure-entitlement security.insecure
 
       - name: "🏭 Setup QEMU Emulation"
