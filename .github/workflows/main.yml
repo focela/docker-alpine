@@ -200,8 +200,8 @@ jobs:
           tags: ${{ steps.prep.outputs.container_images }}
           build-args: |
             ALPINE_VERSION=${{ env.DISTRO_VARIANT }}
-          cache-from: type=gha,scope=${{ matrix.distro_variant }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.distro_variant }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.distro_variant }}
+          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.distro_variant }},mode=max
 
       - name: "📊 Build Summary"
         if: always()
