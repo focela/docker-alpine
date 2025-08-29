@@ -20,6 +20,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write
 
 env:
   DOCKER_BUILDKIT: 1
@@ -182,10 +183,14 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          DOCKER_CONFIG: ${{ github.workspace }}/.docker-ghcr
 
       - name: "🚀 Build and Push Image"
         if: github.event_name != 'pull_request' && steps.prep.outputs.container_images != ''
         uses: docker/build-push-action@v5
+        env:
+          DOCKER_CONFIG: ${{ github.workspace }}/.docker-ghcr
         with:
           builder: ${{ steps.buildx.outputs.name }}
           context: .
