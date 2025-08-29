@@ -192,7 +192,7 @@ jobs:
         env:
           DOCKER_CONFIG: ${{ github.workspace }}/.docker-ghcr
         with:
-          builder: ${{ steps.buildx.outputs.name }}
+          builder: default
           context: .
           file: ./${{ env.build_file }}
           platforms: ${{ matrix.platforms }}
