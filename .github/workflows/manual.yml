@@ -156,9 +156,6 @@ jobs:
       - name: "🔨 Setup Docker Buildx"
         id: buildx
         uses: docker/setup-buildx-action@v3
-        with:
-          driver: docker-container
-          buildkitd-flags: --allow-insecure-entitlement security.insecure
 
       - name: "🏭 Setup QEMU Emulation"
         uses: docker/setup-qemu-action@v3
@@ -196,8 +193,8 @@ jobs:
           tags: ${{ steps.prep.outputs.container_images }}
           build-args: |
             ALPINE_VERSION=${{ env.DISTRO_VARIANT }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.distro_variant }}
-          cache-to: type=registry,ref=ghcr.io/${{ github.repository }}/cache:${{ matrix.distro_variant }},mode=max
+          cache-from: type=gha,scope=${{ matrix.distro_variant }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.distro_variant }}
 
       - name: "📊 Build Summary"
         if: always()
